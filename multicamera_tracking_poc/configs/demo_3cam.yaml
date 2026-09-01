@@ -1,0 +1,51 @@
+project_root: ..
+site_id: camex-office-demo
+
+runtime:
+  target_fps: 10
+  model_batch_size: 3
+  result_queue_size: 128
+
+detector:
+  model: models/yolox_tiny.pth
+  experiment: third_party/ByteTrack/exps/default/yolox_tiny.py
+  torchscript_model: models/yolox_tiny_b3_416.torchscript.pt
+  input_size: 416
+  confidence: 0.25
+  nms: 0.45
+  preprocess_workers: 1
+
+tracker:
+  track_high_threshold: 0.35
+  track_low_threshold: 0.10
+  new_track_threshold: 0.45
+  track_buffer: 150
+  match_threshold: 0.80
+  proximity_threshold: 0.70
+  appearance_threshold: 0.25
+  minimum_box_area: 600
+
+reid:
+  source: third_party/deep-person-reid/torchreid/models/osnet.py
+  architecture: osnet_ibn_x1_0
+  model: models/osnet_ibn_x1_0_msmt17_combineall.pth
+  batch_sizes: [8, 16, 32]
+  minimum_crop_width: 12
+  minimum_crop_height: 30
+  preprocess_workers: 1
+
+global_identity:
+  similarity_threshold: 0.70
+  ambiguity_margin: 0.035
+  active_timeout_seconds: 2.0
+  gallery_retention_seconds: 1800
+
+cameras:
+  - {camera_id: reception, label: Reception}
+  - {camera_id: workspace_1, label: Work Space 1}
+  - {camera_id: workspace_2, label: Work Space 2}
+
+demo_sources:
+  - {camera_id: reception, filename: reception.mp4}
+  - {camera_id: workspace_1, filename: workspace_1.mp4}
+  - {camera_id: workspace_2, filename: workspace_2.mp4}

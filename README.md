@@ -82,3 +82,10 @@ pip install opencv-python numpy insightface onnxruntime-gpu
   falls back to CPU if GPU init fails.
 - Recognition accuracy depends heavily on reference photo quality — use frontal,
   well-lit, unobstructed faces.
+
+## Multi-Camera Tracking PoC
+
+The SCT and site-wide global ReID integration package is available under
+[`multicamera_tracking_poc/`](multicamera_tracking_poc/README.md). See
+[`MULTICAMERA_TRACKING_POC.md`](MULTICAMERA_TRACKING_POC.md) for the technical
+handoff, tested benchmark, and recommended integration sequence.

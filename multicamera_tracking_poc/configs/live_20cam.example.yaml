@@ -1,0 +1,63 @@
+project_root: ..
+site_id: replace-with-client-site-id
+
+runtime:
+  target_fps: 10
+  model_batch_size: 20
+  result_queue_size: 512
+
+detector:
+  model: models/yolox_tiny.pth
+  experiment: third_party/ByteTrack/exps/default/yolox_tiny.py
+  torchscript_model: models/yolox_tiny_b20_416.torchscript.pt
+  input_size: 416
+  confidence: 0.25
+  nms: 0.45
+  preprocess_workers: 1
+
+tracker:
+  track_high_threshold: 0.35
+  track_low_threshold: 0.10
+  new_track_threshold: 0.45
+  track_buffer: 150
+  match_threshold: 0.80
+  proximity_threshold: 0.70
+  appearance_threshold: 0.25
+  minimum_box_area: 600
+
+reid:
+  source: third_party/deep-person-reid/torchreid/models/osnet.py
+  architecture: osnet_ibn_x1_0
+  model: models/osnet_ibn_x1_0_msmt17_combineall.pth
+  batch_sizes: [8, 16, 32]
+  minimum_crop_width: 12
+  minimum_crop_height: 30
+  preprocess_workers: 1
+
+global_identity:
+  similarity_threshold: 0.70
+  ambiguity_margin: 0.035
+  active_timeout_seconds: 2.0
+  gallery_retention_seconds: 1800
+
+cameras:
+  - camera_01
+  - camera_02
+  - camera_03
+  - camera_04
+  - camera_05
+  - camera_06
+  - camera_07
+  - camera_08
+  - camera_09
+  - camera_10
+  - camera_11
+  - camera_12
+  - camera_13
+  - camera_14
+  - camera_15
+  - camera_16
+  - camera_17
+  - camera_18
+  - camera_19
+  - camera_20
