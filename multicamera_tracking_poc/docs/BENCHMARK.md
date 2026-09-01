@@ -64,7 +64,9 @@ That recording set contained 20 distinct clips from three physical views at mult
 
 The run produced 13 model decisions in which a global ID appeared in more than one synchronized view. No annotated person identities were available, so IDF1, HOTA, false-merge, and false-split accuracy were not measured.
 
-The required 20 x 10 FPS target must be repeated on the intended RTX 3090.
-Use the client platform's production decoder during that acceptance run.
-TensorRT, asynchronous decode/inference, and profiling of serial CPU tracking
-and ReID stages remain optimization options if the 3090 misses the target.
+The required 20 x 10 FPS target must be repeated on the intended Dell Pro Max
+Tower T2 with its NVIDIA RTX 5000 Ada Generation 32 GB GPU. Use the client
+platform's production decoder during that acceptance run. TensorRT,
+asynchronous decode/inference, and profiling of serial CPU tracking and ReID
+stages remain optimization options if the workstation misses the target. See
+`TARGET_HARDWARE.md` for the acceptance checklist.

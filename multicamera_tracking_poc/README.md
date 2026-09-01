@@ -13,7 +13,8 @@ Minimal integration package for person detection, single-camera tracking (SCT), 
 
 ## Quick Start
 
-Requirements: Linux, NVIDIA GPU/driver, Docker, NVIDIA Container Toolkit, Git, and internet access for the first model setup.
+Requirements: Linux, or Windows 11 Pro through WSL2, with a compatible NVIDIA
+driver, Docker GPU support, Git, and internet access for the first model setup.
 
 ```bash
 make setup
@@ -46,7 +47,10 @@ service.close()
 
 `submit_frame()` is nonblocking. Each camera has one latest-frame slot; replacing an unprocessed frame avoids latency growth. Cameras may submit independently, and a missing camera does not block the rest of the batch.
 
-See [Integration](docs/INTEGRATION.md), [Event Schema](docs/EVENT_SCHEMA.md), [Configuration](docs/CONFIGURATION.md), [Benchmark](docs/BENCHMARK.md), and [Limitations](docs/LIMITATIONS.md).
+See [Integration](docs/INTEGRATION.md), [Event Schema](docs/EVENT_SCHEMA.md),
+[Configuration](docs/CONFIGURATION.md), [Benchmark](docs/BENCHMARK.md),
+[Target Hardware](docs/TARGET_HARDWARE.md), and
+[Limitations](docs/LIMITATIONS.md).
 
 ## Acceptance Status
 
@@ -55,8 +59,10 @@ with no submitted-frame replacement, stale timestamps, result-queue drops, or
 callback errors. A separate 20-feed integration regression confirmed bounded
 latest-frame behavior, but the Titan X Pascal reached 71.62 aggregate FPS, not
 the required 200 FPS. The 20 x 10 FPS target therefore remains subject to an
-RTX 3090 acceptance test and, if needed, TensorRT pipeline optimization. These
-tests had no identity ground truth and are not ReID accuracy measurements.
+acceptance test on the Dell Pro Max Tower T2 with its NVIDIA RTX 5000 Ada
+Generation 32 GB GPU and, if needed, TensorRT pipeline optimization. These tests
+had no identity ground truth and are not ReID accuracy measurements. See
+[Target Hardware](docs/TARGET_HARDWARE.md).
 
 ## Data and Models
 

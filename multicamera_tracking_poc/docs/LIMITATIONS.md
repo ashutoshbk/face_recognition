@@ -5,6 +5,6 @@
 - Similar clothing, occlusion, poor lighting, and low person resolution can cause false merges or splits.
 - Confidence values are matching scores, not calibrated probabilities.
 - No identity ground truth exists for the supplied office recordings.
-- The packaged Titan X live-feed regression reached 71.62 aggregate FPS, not the 200 FPS required for 20 x 10 FPS; the RTX 3090 must be benchmarked.
+- The packaged Titan X live-feed regression reached 71.62 aggregate FPS, not the 200 FPS required for 20 x 10 FPS; the Dell Pro Max Tower T2 with RTX 5000 Ada Generation 32 GB must be benchmarked.
 - The three-camera demo verifies functionality and integration, not production accuracy.
 - Camera health, stream reconnection, authentication, and retention policy remain platform responsibilities.
