@@ -1,6 +1,12 @@
 from .service import TrackingService
-from .types import FramePacket, FrameResult, TrackResult
+from .types import FramePacket, FrameResult, IdentityAliasEvent, TrackResult
 
-__all__ = ["FramePacket", "FrameResult", "TrackResult", "TrackingService"]
+__all__ = [
+    "FramePacket",
+    "FrameResult",
+    "IdentityAliasEvent",
+    "TrackResult",
+    "TrackingService",
+]
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

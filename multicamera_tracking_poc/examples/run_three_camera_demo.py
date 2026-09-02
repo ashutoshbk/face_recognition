@@ -8,7 +8,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from camex_mct import FrameResult, TrackingService
+from camex_mct import FrameResult, IdentityAliasEvent, TrackingService
 from camex_mct.service import load_config
 
 COLORS = (
@@ -142,8 +142,10 @@ def main() -> None:
         raise RuntimeError(f"unable to create dashboard video: {video_path}")
 
     events_path = output_dir / "track_events.jsonl"
+    identity_updates_path = output_dir / "identity_updates.jsonl"
     metrics_path = output_dir / "demo_metrics.json"
-    service = TrackingService(config)
+    identity_updates: list[IdentityAliasEvent] = []
+    service = TrackingService(config, on_identity_update=identity_updates.append)
     service.start()
     started = time.perf_counter()
     processed_frames = 0
@@ -196,6 +198,13 @@ def main() -> None:
             capture.release()
 
     elapsed = time.perf_counter() - started
+    identity_updates_path.write_text(
+        "".join(
+            json.dumps(update.to_dict(), separators=(",", ":")) + "\n"
+            for update in identity_updates
+        ),
+        encoding="utf-8",
+    )
     metrics = {
         "status": "passed",
         "camera_count": len(sources),
@@ -205,6 +214,7 @@ def main() -> None:
         "wall_duration_seconds": elapsed,
         "video": str(video_path),
         "events": str(events_path),
+        "identity_updates": str(identity_updates_path),
         **service.summary(),
     }
     metrics_path.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")

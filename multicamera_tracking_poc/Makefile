@@ -1,4 +1,4 @@
-IMAGE ?= camex-multicamera-tracking:v0.1.0-poc
+IMAGE ?= camex-multicamera-tracking:v0.1.1-poc
 DATA_DIR ?=
 DEMO_DURATION ?= 60
 

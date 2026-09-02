@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 
 SCHEMA_VERSION = "1.0"
+IDENTITY_EVENT_SCHEMA_VERSION = "1.0"
 
 
 @dataclass(frozen=True)
@@ -64,4 +65,41 @@ class FrameResult:
             "timestamp_ms": self.timestamp_ms,
             "processing_latency_ms": round(self.processing_latency_ms, 3),
             "tracks": [track.to_dict() for track in self.tracks],
+        }
+
+
+@dataclass(frozen=True)
+class IdentityAliasEvent:
+    """A runtime correction from a provisional global ID to its canonical ID."""
+
+    site_id: str
+    sequence: int
+    timestamp_ms: int
+    source_global_id: int
+    canonical_global_id: int
+    similarity: float
+    transition_gap_s: float
+    source_camera_id: str | None = None
+    source_local_id: int | None = None
+    target_camera_id: str | None = None
+    target_local_id: int | None = None
+    reason: str = "record_reconciled"
+    schema_version: str = IDENTITY_EVENT_SCHEMA_VERSION
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "event": "global_id_alias",
+            "site_id": self.site_id,
+            "sequence": self.sequence,
+            "timestamp_ms": self.timestamp_ms,
+            "source_global_id": self.source_global_id,
+            "canonical_global_id": self.canonical_global_id,
+            "similarity": round(self.similarity, 4),
+            "transition_gap_s": round(self.transition_gap_s, 3),
+            "source_camera_id": self.source_camera_id,
+            "source_local_id": self.source_local_id,
+            "target_camera_id": self.target_camera_id,
+            "target_local_id": self.target_local_id,
+            "reason": self.reason,
         }

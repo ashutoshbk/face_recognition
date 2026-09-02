@@ -5,6 +5,7 @@ import os
 import queue
 import threading
 import time
+from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Protocol
@@ -14,9 +15,10 @@ import yaml
 
 from .global_identity import GlobalIdentityStore
 from .tracking import AppearanceCameraTracker, TrackObservation
-from .types import FramePacket, FrameResult, TrackResult
+from .types import FramePacket, FrameResult, IdentityAliasEvent, TrackResult
 
 ResultCallback = Callable[[FrameResult], None]
+IdentityUpdateCallback = Callable[[IdentityAliasEvent], None]
 
 
 class Detector(Protocol):
@@ -50,6 +52,10 @@ class Engine(Protocol):
     camera_ids: tuple[str, ...]
 
     def process_batch(self, packets: Sequence[FramePacket]) -> list[FrameResult]: ...
+
+    def drain_identity_updates(self) -> tuple[IdentityAliasEvent, ...]: ...
+
+    def resolve_global_id(self, global_id: int) -> int: ...
 
     def summary(self) -> dict[str, Any]: ...
 
@@ -191,6 +197,7 @@ class TrackingEngine:
         self._lock = threading.Lock()
         self._frames_processed = 0
         self._batches_processed = 0
+        self._identity_updates: deque[IdentityAliasEvent] = deque()
         self._closed = False
 
         if warmup:
@@ -303,6 +310,59 @@ class TrackingEngine:
                     )
                 result_tracks[packet.camera_id] = tuple(tracks)
 
+            canonical_result_tracks: dict[str, tuple[TrackResult, ...]] = {}
+            for camera_id, tracks in result_tracks.items():
+                canonical_tracks: list[TrackResult] = []
+                for track in tracks:
+                    canonical_id = (
+                        None
+                        if track.global_id is None
+                        else self.identity_store.resolve_global_id(track.global_id)
+                    )
+                    canonical_tracks.append(
+                        TrackResult(
+                            local_id=track.local_id,
+                            global_id=canonical_id,
+                            bbox_xyxy=track.bbox_xyxy,
+                            detection_confidence=track.detection_confidence,
+                            reid_confidence=track.reid_confidence,
+                            status=(
+                                "record_reconciled"
+                                if canonical_id != track.global_id
+                                else track.status
+                            ),
+                        )
+                    )
+                canonical_result_tracks[camera_id] = tuple(canonical_tracks)
+
+            for raw_event in self.identity_store.drain_reconciliation_events():
+                source_track = raw_event["source_track"]
+                target_track = raw_event["target_track"]
+                self._identity_updates.append(
+                    IdentityAliasEvent(
+                        site_id=self.site_id,
+                        sequence=int(raw_event["sequence"]),
+                        timestamp_ms=round(float(raw_event["reconciled_at_s"]) * 1000),
+                        source_global_id=int(raw_event["source_global_id"]),
+                        canonical_global_id=int(raw_event["canonical_global_id"]),
+                        similarity=float(raw_event["similarity"]),
+                        transition_gap_s=float(raw_event["transition_gap_s"]),
+                        source_camera_id=(
+                            str(source_track[0]) if source_track is not None else None
+                        ),
+                        source_local_id=(
+                            int(source_track[1]) if source_track is not None else None
+                        ),
+                        target_camera_id=(
+                            str(target_track[0]) if target_track is not None else None
+                        ),
+                        target_local_id=(
+                            int(target_track[1]) if target_track is not None else None
+                        ),
+                        reason=str(raw_event["reason"]),
+                    )
+                )
+
             latency_ms = (time.perf_counter() - started) * 1000.0
             self._frames_processed += len(sorted_packets)
             self._batches_processed += 1
@@ -311,11 +371,21 @@ class TrackingEngine:
                     site_id=self.site_id,
                     camera_id=packet.camera_id,
                     timestamp_ms=packet.timestamp_ms,
-                    tracks=result_tracks[packet.camera_id],
+                    tracks=canonical_result_tracks[packet.camera_id],
                     processing_latency_ms=latency_ms,
                 )
                 for packet in sorted_packets
             ]
+
+    def drain_identity_updates(self) -> tuple[IdentityAliasEvent, ...]:
+        with self._lock:
+            updates = tuple(self._identity_updates)
+            self._identity_updates.clear()
+            return updates
+
+    def resolve_global_id(self, global_id: int) -> int:
+        with self._lock:
+            return self.identity_store.resolve_global_id(global_id)
 
     def summary(self) -> dict[str, Any]:
         return {
@@ -346,6 +416,7 @@ class TrackingService:
         *,
         engine: Engine | None = None,
         on_result: ResultCallback | None = None,
+        on_identity_update: IdentityUpdateCallback | None = None,
     ) -> None:
         self.config = copy.deepcopy(dict(config))
         self.camera_ids = _camera_ids(self.config)
@@ -355,11 +426,15 @@ class TrackingService:
             raise ValueError("target_fps must be positive")
         self.engine = engine or TrackingEngine(self.config)
         self.on_result = on_result
+        self.on_identity_update = on_identity_update
         self._condition = threading.Condition()
         self._pending: dict[str, FramePacket] = {}
         self._last_timestamp_ms: dict[str, int] = {}
         self._results: queue.Queue[FrameResult] = queue.Queue(
             maxsize=int(runtime.get("result_queue_size", 256))
+        )
+        self._identity_updates: queue.Queue[IdentityAliasEvent] = queue.Queue(
+            maxsize=int(runtime.get("identity_update_queue_size", 256))
         )
         self._thread: threading.Thread | None = None
         self._stopping = False
@@ -369,6 +444,8 @@ class TrackingService:
         self._stale = 0
         self._result_queue_drops = 0
         self._callback_errors = 0
+        self._identity_update_queue_drops = 0
+        self._identity_update_callback_errors = 0
 
     @classmethod
     def from_yaml(
@@ -376,15 +453,26 @@ class TrackingService:
         path: str | Path,
         *,
         on_result: ResultCallback | None = None,
+        on_identity_update: IdentityUpdateCallback | None = None,
     ) -> TrackingService:
-        return cls(load_config(path), on_result=on_result)
+        return cls(
+            load_config(path),
+            on_result=on_result,
+            on_identity_update=on_identity_update,
+        )
 
-    def start(self, on_result: ResultCallback | None = None) -> None:
+    def start(
+        self,
+        on_result: ResultCallback | None = None,
+        on_identity_update: IdentityUpdateCallback | None = None,
+    ) -> None:
         with self._condition:
             if self._thread is not None:
                 raise RuntimeError("tracking service is already started")
             if on_result is not None:
                 self.on_result = on_result
+            if on_identity_update is not None:
+                self.on_identity_update = on_identity_update
             self._stopping = False
             self._thread = threading.Thread(
                 target=self._run,
@@ -421,6 +509,13 @@ class TrackingService:
     def poll_result(self, timeout: float | None = None) -> FrameResult:
         return self._results.get(timeout=timeout)
 
+    def poll_identity_update(self, timeout: float | None = None) -> IdentityAliasEvent:
+        return self._identity_updates.get(timeout=timeout)
+
+    def resolve_global_id(self, global_id: int) -> int:
+        resolver = getattr(self.engine, "resolve_global_id", None)
+        return global_id if resolver is None else int(resolver(global_id))
+
     def _publish(self, result: FrameResult) -> None:
         if self.on_result is not None:
             try:
@@ -436,6 +531,22 @@ class TrackingService:
                 pass
             self._result_queue_drops += 1
             self._results.put_nowait(result)
+
+    def _publish_identity_update(self, update: IdentityAliasEvent) -> None:
+        if self.on_identity_update is not None:
+            try:
+                self.on_identity_update(update)
+            except Exception:
+                self._identity_update_callback_errors += 1
+        try:
+            self._identity_updates.put_nowait(update)
+        except queue.Full:
+            try:
+                self._identity_updates.get_nowait()
+            except queue.Empty:
+                pass
+            self._identity_update_queue_drops += 1
+            self._identity_updates.put_nowait(update)
 
     def _run(self) -> None:
         interval = 1.0 / self.target_fps
@@ -453,7 +564,12 @@ class TrackingService:
                         if camera_id in self._pending
                     ]
                 if packets:
-                    for result in self.engine.process_batch(packets):
+                    results = self.engine.process_batch(packets)
+                    drain_updates = getattr(self.engine, "drain_identity_updates", None)
+                    if drain_updates is not None:
+                        for update in drain_updates():
+                            self._publish_identity_update(update)
+                    for result in results:
                         self._publish(result)
                 next_tick = max(next_tick + interval, time.monotonic())
         except BaseException as exc:
@@ -469,6 +585,8 @@ class TrackingService:
             "rejected_stale_frames": self._stale,
             "result_queue_drops": self._result_queue_drops,
             "callback_errors": self._callback_errors,
+            "identity_update_queue_drops": self._identity_update_queue_drops,
+            "identity_update_callback_errors": self._identity_update_callback_errors,
             **self.engine.summary(),
         }
 

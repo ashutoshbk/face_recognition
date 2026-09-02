@@ -7,7 +7,7 @@ import numpy as np
 from camex_mct.global_identity import GlobalIdentityStore
 from camex_mct.service import TrackingEngine, TrackingService
 from camex_mct.tracking import TrackObservation
-from camex_mct.types import FramePacket, FrameResult
+from camex_mct.types import FramePacket, FrameResult, IdentityAliasEvent
 
 
 class FakeDetector:
@@ -49,6 +49,17 @@ class FakeTracker:
                 appearance_embedding=features[0],
             )
         ]
+
+
+class StaticEmbeddingTracker(FakeTracker):
+    def __init__(self, camera_id: str, embedding: np.ndarray) -> None:
+        super().__init__(camera_id)
+        self.embedding = embedding
+
+    def update(self, detections, frame, detector_input_size, features):
+        observation = super().update(detections, frame, detector_input_size, features)[0]
+        observation.appearance_embedding = self.embedding
+        return [observation]
 
 
 def engine_config() -> dict:
@@ -101,6 +112,54 @@ def test_engine_pads_model_batch_and_connects_camera_ids() -> None:
     engine.close()
 
 
+def test_engine_emits_generic_alias_after_three_camera_reconciliation() -> None:
+    config = engine_config()
+    config["cameras"] = ["reception", "workspace_1", "workspace_2"]
+    config["global_identity"] = {
+        **config["global_identity"],
+        "similarity_threshold": 0.80,
+        "record_reconciliation_enabled": True,
+        "record_reconciliation_interval_seconds": 0.0,
+        "record_reconciliation_similarity_threshold": 0.72,
+        "record_reconciliation_margin": 0.04,
+        "record_reconciliation_max_transition_seconds": 10.0,
+        "record_reconciliation_min_observations": 1,
+    }
+    camera_embeddings = {
+        "reception": np.asarray([1.0, 0.0, 0.0], dtype=np.float32),
+        "workspace_1": np.asarray([0.65, 0.7599342, 0.0], dtype=np.float32),
+        "workspace_2": np.asarray([0.74, 0.6726069, 0.0], dtype=np.float32),
+    }
+    engine = TrackingEngine(
+        config,
+        detector=FakeDetector(),
+        embedder=FakeEmbedder(),
+        tracker_factory=lambda camera_id, _: StaticEmbeddingTracker(
+            camera_id, camera_embeddings[camera_id]
+        ),
+        identity_store=GlobalIdentityStore(**config["global_identity"]),
+        warmup=False,
+    )
+    frame = np.zeros((100, 50, 3), dtype=np.uint8)
+
+    first = engine.process_batch([FramePacket("reception", frame, 0)])
+    second = engine.process_batch([FramePacket("workspace_1", frame, 2000)])
+    third = engine.process_batch([FramePacket("workspace_2", frame, 4000)])
+    updates = engine.drain_identity_updates()
+
+    first_id = first[0].tracks[0].global_id
+    established_id = second[0].tracks[0].global_id
+    assert first_id != established_id
+    assert third[0].tracks[0].global_id == established_id
+    assert engine.resolve_global_id(first_id) == established_id
+    assert len(updates) == 1
+    assert updates[0].source_global_id == first_id
+    assert updates[0].canonical_global_id == established_id
+    assert updates[0].source_camera_id == "reception"
+    assert updates[0].target_camera_id in {"workspace_1", "workspace_2"}
+    engine.close()
+
+
 class FakeEngine:
     camera_ids = ("cam01", "cam02")
 
@@ -117,6 +176,12 @@ class FakeEngine:
 
     def summary(self) -> dict:
         return {"fake_batches": len(self.batches)}
+
+    def drain_identity_updates(self) -> tuple[IdentityAliasEvent, ...]:
+        return ()
+
+    def resolve_global_id(self, global_id: int) -> int:
+        return global_id
 
     def close(self) -> None:
         self.closed = True
@@ -159,3 +224,55 @@ def test_service_keeps_only_latest_pending_frame() -> None:
     result = service.poll_result(timeout=1)
     assert result.timestamp_ms == 200
     assert service.summary()["replaced_before_processing"] == 1
+
+
+class FakeAliasEngine(FakeEngine):
+    def __init__(self) -> None:
+        super().__init__()
+        self.updates: list[IdentityAliasEvent] = []
+
+    def process_batch(self, packets: Sequence[FramePacket]) -> list[FrameResult]:
+        results = super().process_batch(packets)
+        self.updates.append(
+            IdentityAliasEvent(
+                site_id="office",
+                sequence=1,
+                timestamp_ms=packets[0].timestamp_ms,
+                source_global_id=18,
+                canonical_global_id=19,
+                similarity=0.81,
+                transition_gap_s=1.2,
+            )
+        )
+        return results
+
+    def drain_identity_updates(self) -> tuple[IdentityAliasEvent, ...]:
+        updates = tuple(self.updates)
+        self.updates.clear()
+        return updates
+
+    def resolve_global_id(self, global_id: int) -> int:
+        return 19 if global_id == 18 else global_id
+
+
+def test_service_publishes_runtime_identity_alias_and_resolves_old_id() -> None:
+    fake = FakeAliasEngine()
+    callback_updates: list[IdentityAliasEvent] = []
+    service = TrackingService(
+        service_config(target_fps=100),
+        engine=fake,
+        on_identity_update=callback_updates.append,
+    )
+    frame = np.zeros((10, 10, 3), dtype=np.uint8)
+    service.start()
+    service.submit_frame("cam01", frame, 100)
+
+    update = service.poll_identity_update(timeout=2)
+    result = service.poll_result(timeout=2)
+    service.close()
+
+    assert result.timestamp_ms == 100
+    assert update.source_global_id == 18
+    assert update.canonical_global_id == 19
+    assert callback_updates == [update]
+    assert service.resolve_global_id(18) == 19

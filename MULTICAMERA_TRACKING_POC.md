@@ -12,6 +12,8 @@ existing Face ID prototype and staff-photo directory are unchanged.
 - Each camera maintains an independent SCT state and local IDs.
 - One site-wide appearance gallery assigns global IDs across cameras and can
   reconnect a person after disappearance.
+- Multi-observation reconciliation can correct a provisional global ID and
+  emits an explicit alias event for platform cache/database updates.
 - Results are versioned Python objects that serialize directly to JSON.
 
 ## Start Here
@@ -46,8 +48,9 @@ For platform integration, start with:
 1. Run unit tests and the supplied three-camera demo unchanged.
 2. Connect three live decoder callbacks using `submit_frame()`.
 3. Validate local/global ID events through the JSON-compatible result schema.
-4. Expand to 20 camera IDs and run the RTX 5000 Ada throughput acceptance test.
-5. Tune identity thresholds using labeled client footage.
+4. Apply identity-alias events to cached and stored historical records.
+5. Expand to 20 camera IDs and run the RTX 5000 Ada throughput acceptance test.
+6. Tune identity thresholds using labeled client footage.
 
 The exact workstation specification and measurement checklist are in
 `multicamera_tracking_poc/docs/TARGET_HARDWARE.md`.

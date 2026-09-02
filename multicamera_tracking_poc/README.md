@@ -8,6 +8,8 @@ Minimal integration package for person detection, single-camera tracking (SCT), 
 - Uses one batched YOLOX-Tiny detector.
 - Maintains an independent BoT-SORT state and local IDs per camera.
 - Uses OSNet-IBN appearance features for local association and global ReID.
+- Builds identity decisions from multiple observations rather than a single crop.
+- Emits global-ID alias events when stronger cross-camera evidence safely corrects an earlier ID.
 - Retains an in-memory global identity gallery for 30 minutes by default.
 - Emits versioned Python results that serialize directly to JSON.
 
@@ -37,8 +39,12 @@ Generated output is written under `outputs/demo_3cam/`.
 ```python
 from camex_mct import TrackingService
 
-service = TrackingService.from_yaml("configs/live_20cam.example.yaml")
-service.start(on_result=platform.handle_tracking_result)
+service = TrackingService.from_yaml(
+    "configs/live_20cam.example.yaml",
+    on_result=platform.handle_tracking_result,
+    on_identity_update=platform.handle_identity_alias,
+)
+service.start()
 
 service.submit_frame("camera_01", bgr_frame, timestamp_ms)
 
@@ -47,8 +53,13 @@ service.close()
 
 `submit_frame()` is nonblocking. Each camera has one latest-frame slot; replacing an unprocessed frame avoids latency growth. Cameras may submit independently, and a missing camera does not block the rest of the batch.
 
+An identity-alias event is generated dynamically when a provisional ID is
+reconciled. The platform should update cached and stored references from the
+source ID to the canonical ID. No identity numbers are hardcoded.
+
 See [Integration](docs/INTEGRATION.md), [Event Schema](docs/EVENT_SCHEMA.md),
 [Configuration](docs/CONFIGURATION.md), [Benchmark](docs/BENCHMARK.md),
+[Global-ID Reconciliation](docs/GLOBAL_ID_RECONCILIATION.md),
 [Target Hardware](docs/TARGET_HARDWARE.md), and
 [Limitations](docs/LIMITATIONS.md).
 

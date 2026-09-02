@@ -4,16 +4,22 @@ from __future__ import annotations
 
 import json
 
-from camex_mct import FrameResult, TrackingService
+from camex_mct import FrameResult, IdentityAliasEvent, TrackingService
 
 
 def publish_to_platform(result: FrameResult) -> None:
     print(json.dumps(result.to_dict(), separators=(",", ":")))
 
 
+def publish_identity_update(update: IdentityAliasEvent) -> None:
+    # Apply this alias to cached and stored records before publishing later frames.
+    print(json.dumps(update.to_dict(), separators=(",", ":")))
+
+
 service = TrackingService.from_yaml(
     "configs/live_20cam.example.yaml",
     on_result=publish_to_platform,
+    on_identity_update=publish_identity_update,
 )
 service.start()
 

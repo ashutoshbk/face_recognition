@@ -35,6 +35,7 @@ docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
 - 200 accepted and processed frames per second in aggregate
 - Independent local tracking state for every camera
 - Site-wide global ReID output through the public result schema
+- Identity-alias events applied to cached and stored historical records
 - Bounded latency without an accumulating frame queue
 
 Record accepted and processed frames, latest-slot replacements, p50/p95 batch

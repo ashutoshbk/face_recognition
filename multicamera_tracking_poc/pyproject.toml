@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "camex-multicamera-tracking"
-version = "0.1.0"
+version = "0.1.1"
 description = "Integration-oriented single- and multi-camera person tracking PoC"
 readme = "README.md"
 requires-python = ">=3.10,<3.12"
