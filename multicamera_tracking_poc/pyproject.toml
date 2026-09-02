@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "camex-multicamera-tracking"
+version = "0.1.1"
+description = "Integration-oriented single- and multi-camera person tracking PoC"
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+dependencies = [
+  "numpy==1.23.5",
+  "PyYAML==6.0.2",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

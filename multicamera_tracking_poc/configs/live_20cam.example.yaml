@@ -1,0 +1,78 @@
+project_root: ..
+site_id: replace-with-client-site-id
+
+runtime:
+  target_fps: 10
+  model_batch_size: 20
+  result_queue_size: 512
+  identity_update_queue_size: 512
+
+detector:
+  model: models/yolox_tiny.pth
+  experiment: third_party/ByteTrack/exps/default/yolox_tiny.py
+  torchscript_model: models/yolox_tiny_b20_416.torchscript.pt
+  input_size: 416
+  confidence: 0.25
+  nms: 0.45
+  preprocess_workers: 1
+
+tracker:
+  track_high_threshold: 0.35
+  track_low_threshold: 0.10
+  new_track_threshold: 0.45
+  track_buffer: 150
+  match_threshold: 0.80
+  proximity_threshold: 0.70
+  appearance_threshold: 0.25
+  minimum_box_area: 600
+
+reid:
+  source: third_party/deep-person-reid/torchreid/models/osnet.py
+  architecture: osnet_ibn_x1_0
+  model: models/osnet_ibn_x1_0_msmt17_combineall.pth
+  batch_sizes: [8, 16, 32]
+  minimum_crop_width: 12
+  minimum_crop_height: 30
+  preprocess_workers: 1
+
+global_identity:
+  similarity_threshold: 0.77
+  ambiguity_margin: 0.05
+  active_timeout_seconds: 2.0
+  gallery_retention_seconds: 1800
+  same_camera_overlap_tolerance_seconds: 0.2
+  minimum_track_observations: 6
+  evidence_window_size: 30
+  reassignment_interval_seconds: 0.5
+  reassignment_grace_seconds: 15.0
+  reassignment_threshold: 0.82
+  reassignment_margin: 0.06
+  record_reconciliation_enabled: true
+  record_reconciliation_interval_seconds: 0.5
+  record_reconciliation_similarity_threshold: 0.72
+  record_reconciliation_margin: 0.04
+  record_reconciliation_max_transition_seconds: 10.0
+  record_reconciliation_min_cameras: 2
+  record_reconciliation_min_observations: 8
+
+cameras:
+  - camera_01
+  - camera_02
+  - camera_03
+  - camera_04
+  - camera_05
+  - camera_06
+  - camera_07
+  - camera_08
+  - camera_09
+  - camera_10
+  - camera_11
+  - camera_12
+  - camera_13
+  - camera_14
+  - camera_15
+  - camera_16
+  - camera_17
+  - camera_18
+  - camera_19
+  - camera_20
