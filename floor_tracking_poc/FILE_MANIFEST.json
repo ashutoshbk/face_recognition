@@ -1,0 +1,514 @@
+{
+  ".dockerignore": {
+    "sha256": "259a4ea97a163233f0050a0611e541a86e351268c178ee82504cb260db108329",
+    "bytes": 156
+  },
+  ".gitattributes": {
+    "sha256": "058827b7b15e0d12cc04e6a1a89e5796712709543339eab76930473677ff938f",
+    "bytes": 53
+  },
+  ".gitignore": {
+    "sha256": "c0595a13f7faae27c2bf8c84961e097a5b04b45e999cb42accfb281eda3de008",
+    "bytes": 254
+  },
+  "MODEL_PROVENANCE.md": {
+    "sha256": "08dd60a16b1e1b0bbc6ff0b1505e3a8725a8eda0613c1ff6dfd69b2d1ae6c22a",
+    "bytes": 3203
+  },
+  "README.md": {
+    "sha256": "90bfeba3d49f85aa13b13585d18d98c79ed819c204ea7b5fa9a87132af49716f",
+    "bytes": 14982
+  },
+  "docs/HANDOFF.md": {
+    "sha256": "bd8bf94c251de9e7d6bc3b9e475988efe6856349cf8a97a26ddb36047cd00def",
+    "bytes": 4284
+  },
+  "docs/INTEGRATION.md": {
+    "sha256": "cd5aaa0b142f5a9b6c019fa6bb436c67da7728ad291e1b14d6d0ea29f24a36c5",
+    "bytes": 3108
+  },
+  "docs/OPERATOR_MANUAL.md": {
+    "sha256": "ec00324b76aa06a60da7e4466b993f38603145b4918a17506e216776b468bba2",
+    "bytes": 46858
+  },
+  "docs/VALIDATION.md": {
+    "sha256": "34394447db666558363645c20776692a902c034b9d29ca583bbdbe0b7384500a",
+    "bytes": 3414
+  },
+  "engines/calibration/app/calibrate.py": {
+    "sha256": "07216da189bd8dd7a0be95930946add31e7e3bb6abc84e931b24ab284d1b68a3",
+    "bytes": 31021
+  },
+  "engines/calibration/app/test_geometry.py": {
+    "sha256": "aa29943867673ce540dd2b9fb90c1a33be656a4ec28ce81f1b224a6c1d4891ef",
+    "bytes": 1015
+  },
+  "engines/calibration/licenses/GEOCALIB_APACHE_2.0.txt": {
+    "sha256": "b458637616125d96702f04666c7717d3a1ade0824f6ea6ccf512b4828f35c8d5",
+    "bytes": 10755
+  },
+  "engines/calibration/licenses/VGGT_LICENSE_AND_AUP.txt": {
+    "sha256": "b94e46746792d1adfa0ebdbccada5d4576d244ae230be9de8a46b5868fff001b",
+    "bytes": 10722
+  },
+  "engines/calibration/vendor/GeoCalib/.gitattributes": {
+    "sha256": "6b9b22be208f7b0efa1b3fbfad3574276fcf4c9759f59b5e984bd1ba2ccea3c3",
+    "bytes": 31
+  },
+  "engines/calibration/vendor/GeoCalib/.gitignore": {
+    "sha256": "88e86401842ba52e1e17016c92ba8ce54cef155262f7c79ecbe3f7523874bac6",
+    "bytes": 1887
+  },
+  "engines/calibration/vendor/GeoCalib/.pre-commit-config.yaml": {
+    "sha256": "026cfe25550d8e9a3019e02c5d40d921d5f3d210f47e1cdb84fd9cb29d561e64",
+    "bytes": 867
+  },
+  "engines/calibration/vendor/GeoCalib/LICENSE": {
+    "sha256": "b458637616125d96702f04666c7717d3a1ade0824f6ea6ccf512b4828f35c8d5",
+    "bytes": 10755
+  },
+  "engines/calibration/vendor/GeoCalib/README.md": {
+    "sha256": "9568126845a274760210f7a41a3915ea42aab48b6a938be07f92e673a6a5ccfb",
+    "bytes": 23790
+  },
+  "engines/calibration/vendor/GeoCalib/geocalib/__init__.py": {
+    "sha256": "d9445e6e8b4e23793bba11a867a7e3dc3e2464c59c8ebdc69fb01503757b73ca",
+    "bytes": 431
+  },
+  "engines/calibration/vendor/GeoCalib/geocalib/camera.py": {
+    "sha256": "c82081ccd68c440cee8ff374638a86b2d1d94ec1d05c3e103fa8000770baa549",
+    "bytes": 37024
+  },
+  "engines/calibration/vendor/GeoCalib/geocalib/extractor.py": {
+    "sha256": "d37a74020e939b29f2fccdc5f46b5f4bafa6f4064541274b2b9810ce5231be0d",
+    "bytes": 5050
+  },
+  "engines/calibration/vendor/GeoCalib/geocalib/geocalib.py": {
+    "sha256": "4c221b3922911e0372f5837bc3a4e87ac44afe2721049b20a65cdcf6b8a2eab9",
+    "bytes": 5474
+  },
+  "engines/calibration/vendor/GeoCalib/geocalib/gravity.py": {
+    "sha256": "2c518251171682c402d62e69bd63ae911c9ee89c29c34c3c6b3d9ef56b50f4a4",
+    "bytes": 4426
+  },
+  "engines/calibration/vendor/GeoCalib/geocalib/interactive_demo.py": {
+    "sha256": "43ac5a6df03e9357c25b58ddd0a186b1f2770545930d09d92accceb77d051908",
+    "bytes": 14991
+  },
+  "engines/calibration/vendor/GeoCalib/geocalib/lm_optimizer.py": {
+    "sha256": "dbda352e10192fc4304cdffcf5ea5dcc143a9bcebbb176306cde26bcf615eb5f",
+    "bytes": 31869
+  },
+  "engines/calibration/vendor/GeoCalib/geocalib/misc.py": {
+    "sha256": "1aedafacca78d0c2c0c36db2bf6eae643cca43f9faf133b3be8a54c456919b88",
+    "bytes": 10438
+  },
+  "engines/calibration/vendor/GeoCalib/geocalib/modules.py": {
+    "sha256": "222f28ef570fbda9bd46bbd7c6089ccff8b9d96072177dd54179b6444fd48de6",
+    "bytes": 18900
+  },
+  "engines/calibration/vendor/GeoCalib/geocalib/perspective_fields.py": {
+    "sha256": "50a601c50b5420c46aa4d597f50d7388e4f700e5a0c12bd89681d4ce929ff293",
+    "bytes": 14762
+  },
+  "engines/calibration/vendor/GeoCalib/geocalib/utils.py": {
+    "sha256": "2292fea1ad5f7a7011dacd4210dbd99f6eba003b677efd0cf389e157bcd4f5fd",
+    "bytes": 11463
+  },
+  "engines/calibration/vendor/GeoCalib/geocalib/viz2d.py": {
+    "sha256": "2c2b63cc464d6d906270893098bf7be1930c0488c34560ab1b06fa245178213c",
+    "bytes": 15357
+  },
+  "engines/calibration/vendor/GeoCalib/pyproject.toml": {
+    "sha256": "a87e9860da5c358797fa70724a90b8f76ada1bcb165dbae0627f1e881c556a24",
+    "bytes": 1145
+  },
+  "engines/calibration/vendor/GeoCalib/requirements.txt": {
+    "sha256": "c8d36763021eb59b0c037f9a159273812f64f09ea4d915d982d73e701b04d643",
+    "bytes": 50
+  },
+  "engines/calibration/vendor/vggt/.gitattributes": {
+    "sha256": "aaccaa098b58fcbf82a467f2995def326edc472d6295dc23bd9c68bc56ae49f5",
+    "bytes": 122
+  },
+  "engines/calibration/vendor/vggt/.gitignore": {
+    "sha256": "c9948f2a9be172a267294b099deba4f3df1705a2936cd390c1ca84802248feed",
+    "bytes": 2020
+  },
+  "engines/calibration/vendor/vggt/CODE_OF_CONDUCT.md": {
+    "sha256": "b161b3e2ec4712ebf69efc38ef796d2c701a323aac51cf11759d38e9c56c39bd",
+    "bytes": 3537
+  },
+  "engines/calibration/vendor/vggt/CONTRIBUTING.md": {
+    "sha256": "070a356a3efc36dcf29a5215d3461f20a142156e376b5cc245f92b5581fd1e1a",
+    "bytes": 1242
+  },
+  "engines/calibration/vendor/vggt/LICENSE.txt": {
+    "sha256": "b94e46746792d1adfa0ebdbccada5d4576d244ae230be9de8a46b5868fff001b",
+    "bytes": 10722
+  },
+  "engines/calibration/vendor/vggt/README.md": {
+    "sha256": "56426b9aea25174ccbc4c2c37a3a22107fd8b5ac9dc5a8bf008e7457402ed3bd",
+    "bytes": 14404
+  },
+  "engines/calibration/vendor/vggt/pyproject.toml": {
+    "sha256": "e12fc8148c698f5134f3783f0f59f620377600af371eb05f2de43487bc782634",
+    "bytes": 1040
+  },
+  "engines/calibration/vendor/vggt/requirements.txt": {
+    "sha256": "171720da9f30387a5232065fd7848d767cc6cb9fafca2da928aa686cb79923f2",
+    "bytes": 89
+  },
+  "engines/calibration/vendor/vggt/requirements_demo.txt": {
+    "sha256": "a4a2d34487f088e4240b92e2d8df1aa7ae6ab7c0859a40648329df381d2c47ef",
+    "bytes": 298
+  },
+  "engines/calibration/vendor/vggt/vggt/dependency/__init__.py": {
+    "sha256": "3302fe9db9c9a08956c81e3ee7a3cd3fde0e830ab65f692cc89959c984464da1",
+    "bytes": 185
+  },
+  "engines/calibration/vendor/vggt/vggt/dependency/distortion.py": {
+    "sha256": "d95ab35395ea5887138e0855599298a91d55bb9c49e0c4025af5f2e1879bf5e8",
+    "bytes": 6511
+  },
+  "engines/calibration/vendor/vggt/vggt/dependency/np_to_pycolmap.py": {
+    "sha256": "bbb233d3a36aad00a89caf252ecc7e3ba6518bbd3c9be32eaf3efe46ef3a3b3d",
+    "bytes": 10764
+  },
+  "engines/calibration/vendor/vggt/vggt/dependency/projection.py": {
+    "sha256": "000536f56bdaa25b6f53b388c385d97f828e7b17f47d45dfd9deeeca702732c7",
+    "bytes": 9260
+  },
+  "engines/calibration/vendor/vggt/vggt/dependency/track_modules/__init__.py": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "engines/calibration/vendor/vggt/vggt/dependency/track_modules/base_track_predictor.py": {
+    "sha256": "55dae69b226352e4a7d78fc4444a45d3b9decb054c78785ad09a9ea3943779e7",
+    "bytes": 7425
+  },
+  "engines/calibration/vendor/vggt/vggt/dependency/track_modules/blocks.py": {
+    "sha256": "52f7c528830c57131393a33c3a0a2add6af27e04f77b754cf2c636cccaedc0e4",
+    "bytes": 12239
+  },
+  "engines/calibration/vendor/vggt/vggt/dependency/track_modules/modules.py": {
+    "sha256": "3fed3272583f4ff98e149105439548f75221f7fab49d34a140571fb630ba0629",
+    "bytes": 6274
+  },
+  "engines/calibration/vendor/vggt/vggt/dependency/track_modules/track_refine.py": {
+    "sha256": "9eb0f1be662c2665402b61980001f118e61d4b02e051caf1f0de7c9e1b38ae37",
+    "bytes": 17290
+  },
+  "engines/calibration/vendor/vggt/vggt/dependency/track_modules/utils.py": {
+    "sha256": "d6f2f2c87000d96c6e744e658c338416dbd05626b8df66b9c979132e4ab25d3a",
+    "bytes": 7825
+  },
+  "engines/calibration/vendor/vggt/vggt/dependency/track_predict.py": {
+    "sha256": "8ee1dc033ef059a895c8176625e13d7bcef135a59c1bb30b6ecf75c8a09fc628",
+    "bytes": 12365
+  },
+  "engines/calibration/vendor/vggt/vggt/dependency/vggsfm_tracker.py": {
+    "sha256": "6ca09da1d20e4fd2aceb3e7a0ea240738d5d2a766ce5d378ee548a41bf64b283",
+    "bytes": 4668
+  },
+  "engines/calibration/vendor/vggt/vggt/dependency/vggsfm_utils.py": {
+    "sha256": "6a5bf8d2a669672aae8cfc4e66192a065a3f64268792fe5b64f86fe326d1b569",
+    "bytes": 11093
+  },
+  "engines/calibration/vendor/vggt/vggt/heads/camera_head.py": {
+    "sha256": "d177f3d64d53210209b7bbb8496faaaec91f3fc51d04a4ee8d9d6b70f053e132",
+    "bytes": 5817
+  },
+  "engines/calibration/vendor/vggt/vggt/heads/dpt_head.py": {
+    "sha256": "b83ff030043f2ba808afb0c0ebc2f40f1d2ddc9d0b4b847bdfd53670f2d03e17",
+    "bytes": 17327
+  },
+  "engines/calibration/vendor/vggt/vggt/heads/head_act.py": {
+    "sha256": "428bdb087f457b809a66e22d7d01147c1cb4dab43bb0d98bc61c7f05d8383a1e",
+    "bytes": 3741
+  },
+  "engines/calibration/vendor/vggt/vggt/heads/track_head.py": {
+    "sha256": "5838f10401ad4c614e5608314f7b27b9195af8839e8bbb3321bfb6aad41a3e59",
+    "bytes": 4207
+  },
+  "engines/calibration/vendor/vggt/vggt/heads/track_modules/__init__.py": {
+    "sha256": "3cb62676c3fad403516673b2e99cdb6cbc0b71f814c3bb7f551bfa1e8495e062",
+    "bytes": 198
+  },
+  "engines/calibration/vendor/vggt/vggt/heads/track_modules/base_track_predictor.py": {
+    "sha256": "8afb4311f71b74a85a2faf12386e72a782678e8d5e223a95645b951e6fbae185",
+    "bytes": 8027
+  },
+  "engines/calibration/vendor/vggt/vggt/heads/track_modules/blocks.py": {
+    "sha256": "7c00a9edec0c4ce0ba773063ba72e578004731dc3f9a6386478f2c1d2f06e948",
+    "bytes": 9812
+  },
+  "engines/calibration/vendor/vggt/vggt/heads/track_modules/modules.py": {
+    "sha256": "3b86a7580cee368ddb97a37a879b82943a8f82ca539979ecdd3218c27a4aa811",
+    "bytes": 6132
+  },
+  "engines/calibration/vendor/vggt/vggt/heads/track_modules/utils.py": {
+    "sha256": "0480f9c7a452310affc4cf4566c6ba37fde80675c476123ee61a4eab121f4917",
+    "bytes": 8136
+  },
+  "engines/calibration/vendor/vggt/vggt/heads/utils.py": {
+    "sha256": "2dce4c0dca1974a5250cc5d5d95bd3417e3ba9494978437a12d5ab6bbff4d4df",
+    "bytes": 3941
+  },
+  "engines/calibration/vendor/vggt/vggt/layers/__init__.py": {
+    "sha256": "e3c28c7b775165b6844000eb69f44d104d6c3803ac7da5d59f6ac3ecfb46d9d8",
+    "bytes": 382
+  },
+  "engines/calibration/vendor/vggt/vggt/layers/attention.py": {
+    "sha256": "883b82b8fd1d833e4b7060a97cff44aa677288e2f91415763d0deac48d111469",
+    "bytes": 3067
+  },
+  "engines/calibration/vendor/vggt/vggt/layers/block.py": {
+    "sha256": "4f2303fb83b63655d17aac7d4937772093dcc5b27c73b6ea2f727a4068131b51",
+    "bytes": 9379
+  },
+  "engines/calibration/vendor/vggt/vggt/layers/drop_path.py": {
+    "sha256": "b9f8236e86054b9d9a71275efcad2a9ecaa1f86b529d4b8d6109ddb5e806f67a",
+    "bytes": 1157
+  },
+  "engines/calibration/vendor/vggt/vggt/layers/layer_scale.py": {
+    "sha256": "83586eaa81ef11828b1001f3dd85747ba362df23ddb57c8454b2eba279f5a558",
+    "bytes": 781
+  },
+  "engines/calibration/vendor/vggt/vggt/layers/mlp.py": {
+    "sha256": "255825c73b60a916dd00eb1e38aacbcdbf316e40d6a005efb46e245b7edb43aa",
+    "bytes": 1269
+  },
+  "engines/calibration/vendor/vggt/vggt/layers/patch_embed.py": {
+    "sha256": "c2543ec293951d081db662b2125027625f6e632971630facaa7f911c2377d335",
+    "bytes": 2794
+  },
+  "engines/calibration/vendor/vggt/vggt/layers/rope.py": {
+    "sha256": "c56b073724f4d56cc531e381835a2c3dc348f192aefd9e855e3e59ab3c7d6641",
+    "bytes": 7676
+  },
+  "engines/calibration/vendor/vggt/vggt/layers/swiglu_ffn.py": {
+    "sha256": "af287ee5b7e6a2a5608ed78cf8d392a00191718825a3889c224ccaa0fd914089",
+    "bytes": 2131
+  },
+  "engines/calibration/vendor/vggt/vggt/layers/vision_transformer.py": {
+    "sha256": "857932a5a7cf8fa062535464b4831493544715cdfb729648a83a10098a5eae87",
+    "bytes": 15075
+  },
+  "engines/calibration/vendor/vggt/vggt/models/aggregator.py": {
+    "sha256": "c994d7231eda2380f208355a64bce3cd7c4b97ef06393355e632415bfc1513e5",
+    "bytes": 13387
+  },
+  "engines/calibration/vendor/vggt/vggt/models/vggt.py": {
+    "sha256": "dbc92d6214882161d9042b1bc60cc932a9fd6bb609fc913d14906328f7833607",
+    "bytes": 4862
+  },
+  "engines/calibration/vendor/vggt/vggt/utils/geometry.py": {
+    "sha256": "c6f505182e4e926629c04adbdf633eb80238da3a3c87eb8337b6f130ab01ab93",
+    "bytes": 11849
+  },
+  "engines/calibration/vendor/vggt/vggt/utils/helper.py": {
+    "sha256": "5182cf8d6a35b9100922d8056c6d91cdfda2b53ff5dde21c061e976e47ef0bb0",
+    "bytes": 2317
+  },
+  "engines/calibration/vendor/vggt/vggt/utils/load_fn.py": {
+    "sha256": "d57b7a16c2e04333a2e68d365aa21f1dd61759e984f744cbcbe6b66d787f37ef",
+    "bytes": 8724
+  },
+  "engines/calibration/vendor/vggt/vggt/utils/pose_enc.py": {
+    "sha256": "845fc3a46cb851bebf0720b8fc2b9f34334ae8e11f1982376ba59f90ff18f22b",
+    "bytes": 5517
+  },
+  "engines/calibration/vendor/vggt/vggt/utils/rotation.py": {
+    "sha256": "ad3a904e243c6654f0aa5f1d0206ace5f2d61011bc1bf8f492b40e0b76cb2070",
+    "bytes": 4584
+  },
+  "engines/calibration/vendor/vggt/vggt/utils/visual_track.py": {
+    "sha256": "b6b6103f62dfa470565100a1c6166c87fad234fcef75ffb78af70157ac2746de",
+    "bytes": 8354
+  },
+  "engines/mct/MODEL_PROVENANCE.md": {
+    "sha256": "cf62c3483f82d0fd71f19bc1c99b31cf6da51c086ea234a9f23c286c93a52729",
+    "bytes": 1519
+  },
+  "engines/mct/THIRD_PARTY_NOTICES.md": {
+    "sha256": "0214060864d572129860425b68baf9bb5d5e28a001940d2d707668589e8408f6",
+    "bytes": 2082
+  },
+  "engines/mct/patches/bot-sort-external-reid.patch": {
+    "sha256": "1906514204264b61bab626db83c908d997cdcec137b0d69b8daf1c2209c98c76",
+    "bytes": 1212
+  },
+  "engines/mct/src/camex_mct/__init__.py": {
+    "sha256": "edb3f98523fa63cfe40c7e6ebceff94754d4aa447a47d721cdbc34c61e3764a2",
+    "bytes": 258
+  },
+  "engines/mct/src/camex_mct/dependencies.py": {
+    "sha256": "d7d33e1538e7395e8211207b355299d3d220a7416cce11e9383e0d306b7fa611",
+    "bytes": 929
+  },
+  "engines/mct/src/camex_mct/global_identity.py": {
+    "sha256": "1162580eab25395975157cc7f94c06160161a416aa3f659609fb1e4fbe82591a",
+    "bytes": 31978
+  },
+  "engines/mct/src/camex_mct/models.py": {
+    "sha256": "ae054d1d0aea94446316c47378c681931b179b620c176029da8106c4e10ef19f",
+    "bytes": 10634
+  },
+  "engines/mct/src/camex_mct/service.py": {
+    "sha256": "045c6d72e0a0a41aba5732ba1cd21b662dd80a9a832d5524f981c7e2a6f471ea",
+    "bytes": 25016
+  },
+  "engines/mct/src/camex_mct/tracking.py": {
+    "sha256": "f910de8a4b776cb88ab28be093e3d1d69aeb1835647c028200d8fa640ba56bb1",
+    "bytes": 7518
+  },
+  "engines/mct/src/camex_mct/types.py": {
+    "sha256": "ce56dd07b4a4ee04020edbd48b582b9746ee59184cc1fc5811eddf6a9dfe5d08",
+    "bytes": 3362
+  },
+  "engines/mct/third_party.lock": {
+    "sha256": "e606fe90d54bfd6a2c4c3a0ef040bf02b546d85e9ad520dc992bf67e05734da0",
+    "bytes": 303
+  },
+  "examples/live_floor_adapter.py": {
+    "sha256": "342db7d281104c86104b647dc841194ed9ec60631c499c759294e1be4496dbe1",
+    "bytes": 1277
+  },
+  "gpu/Dockerfile": {
+    "sha256": "14c081c8cd6365bf3c35a5f204e34390b8fedbe4a5dc81d3fa32e3ac02782630",
+    "bytes": 1349
+  },
+  "gpu/inference.py": {
+    "sha256": "64c3fe4a82dd4d2f321909c9b94971c7b87b34d0d74e1cf2dd828a0d6e7252a0",
+    "bytes": 10919
+  },
+  "gpu/requirements.txt": {
+    "sha256": "26599ca9c17622a56fd987c3f5d99266f6195e9747700fb766a52679fa802ac6",
+    "bytes": 385
+  },
+  "gpu/setup.py": {
+    "sha256": "b3963c8f060da54ad5429c6c0274462679e1897e8b70f7d10f859c12c8edc56a",
+    "bytes": 3207
+  },
+  "gpu/setup_vendor.py": {
+    "sha256": "7a8e548feed9961fa49e46192d1f515529dc29d833359231569a1fc7aed69750",
+    "bytes": 1072
+  },
+  "gpu/worker.py": {
+    "sha256": "5e37a6edcff7b93c756fa27d880705b5bde6633abb16bfb4165ffda18a9ed81f",
+    "bytes": 3531
+  },
+  "install.sh": {
+    "sha256": "72333e6a1fd42b0b4d91ee851608596784c2def21d3c4693db3949daaf9e85ec",
+    "bytes": 911
+  },
+  "launch.sh": {
+    "sha256": "74eb0c88fc6eb862c64a7a8d84f9b001cdbc5082babe7d8a4dddee393ba00412",
+    "bytes": 231
+  },
+  "models_manifest.json": {
+    "sha256": "9d8619590d6d721357167f61e94f78e2ee7ec919d4fde65ada15863ddca830d1",
+    "bytes": 905
+  },
+  "pyproject.toml": {
+    "sha256": "685fe0b111b686f234fb1ffe6db4362af190102c1a23d4add8ef3926c96b23cf",
+    "bytes": 614
+  },
+  "src/camex_floor/__init__.py": {
+    "sha256": "dee8ae67485422f958d9bc8f639180573d2ca615f6703807cf3277fa828eecdf",
+    "bytes": 179
+  },
+  "src/camex_floor/adapter.py": {
+    "sha256": "0bfec12bf7df9f3247c4aeadc9036aa72ed5df271c472e80cb1aeb30a03b23ea",
+    "bytes": 3201
+  },
+  "src/camex_floor/cli.py": {
+    "sha256": "810999399e83a2f7cb7b15bbdce401e4509f1aa46e3401f13dd31fd1fe8422bc",
+    "bytes": 8740
+  },
+  "src/camex_floor/detection_support.py": {
+    "sha256": "718a630d44372bf321efc155c40ab1f517c3f1e36de4cf2369554a83d5ce2c66",
+    "bytes": 2559
+  },
+  "src/camex_floor/geometry.py": {
+    "sha256": "6caadd17435c51442cb08b9fefca195f7c5226d780614e4e9351d029af3a080d",
+    "bytes": 11456
+  },
+  "src/camex_floor/pipeline.py": {
+    "sha256": "3bc594f5b6850d583fd9db3dfa36da5c8458e4c1ea35c34f0db7d7de2e5d7aff",
+    "bytes": 38271
+  },
+  "src/camex_floor/replay.py": {
+    "sha256": "1a0edae1026e6024e39e190f00eaa5572f3a74a1cf8085453d87a92b57dc5133",
+    "bytes": 13259
+  },
+  "src/camex_floor/runtime.py": {
+    "sha256": "4e84207534eb212efb531daf7034cafe9a873a5dbe1ac22d94229141145e2c03",
+    "bytes": 34218
+  },
+  "src/camex_floor/server.py": {
+    "sha256": "773f8e7a109b933e493bb511e8d8e782c944c258eaa3e717de75572f300af727",
+    "bytes": 11803
+  },
+  "src/camex_floor/studio.py": {
+    "sha256": "f0490cba8995013d91a5b56667a0fb1ee9d1fcac19dcde9701fa95db75c752d6",
+    "bytes": 10831
+  },
+  "src/camex_floor/studio_web/app.js": {
+    "sha256": "fa7863fd73ceeeb6fb75439e1b030a76982b603f2bab8d27e5303821da1d7fba",
+    "bytes": 34635
+  },
+  "src/camex_floor/studio_web/index.html": {
+    "sha256": "8b47fe2453f05448dc964c1e3572736c6cde3306fd10bf5f9e27094110312077",
+    "bytes": 10292
+  },
+  "src/camex_floor/studio_web/style.css": {
+    "sha256": "cdc737bbfe22a07e4aacee94ed2c0d2dae7610b455a0a6ea073435b9c306c09e",
+    "bytes": 7243
+  },
+  "src/camex_floor/vggt_import.py": {
+    "sha256": "ed8f7256b47677e8144c9ff75447fe4eec033fca39895e3c4722e30ef2851298",
+    "bytes": 9605
+  },
+  "src/camex_floor/web/app.js": {
+    "sha256": "c87c1707b37b8b5e663681ec9987debbd3682f5df7ce7095451199fa6cc3d849",
+    "bytes": 8499
+  },
+  "src/camex_floor/web/index.html": {
+    "sha256": "a69a0b8800572a4a63de9e25d6d639c3cd5774b493186074b18659a7648ea745",
+    "bytes": 2718
+  },
+  "src/camex_floor/web/style.css": {
+    "sha256": "e6218dde70a5c0b0a8511047ff6592f8e3ea09ee730849c39b7f82f7706f6f9c",
+    "bytes": 3226
+  },
+  "tests/test_detection_support.py": {
+    "sha256": "27baf0625586f4d7ff4ee76f3b7105ed9ab90d0d56d5f6848f4f44d56ed97082",
+    "bytes": 1157
+  },
+  "tests/test_ground_contacts.py": {
+    "sha256": "00b2a2bb7d5c1f334f3cd7421284b21ae456f048d23b21e21d6cf2bb73bd4221",
+    "bytes": 2091
+  },
+  "tests/test_integration.py": {
+    "sha256": "9c175fcd11792d8db2cff55e49f195ce49866357eb818694114e1946c77494cd",
+    "bytes": 5470
+  },
+  "tests/test_model_integrity.py": {
+    "sha256": "0c8369e3b2a3f2fe678d2ef2e463e2f72b00c9eeb659e94ef17ab5e32444f1fc",
+    "bytes": 1353
+  },
+  "tests/test_projects.py": {
+    "sha256": "3e09ab23a5034520efcdf5310e3ed65cb83ab4dc7b4a5270ab7e39edfa50713d",
+    "bytes": 12601
+  },
+  "tests/test_runtime.py": {
+    "sha256": "6e98b6536afb7a45f218192b6f469b66825412ba5f659af2e619e28f2becbc2e",
+    "bytes": 9927
+  },
+  "tests/test_vggt_import.py": {
+    "sha256": "03e518e4d144a1f904db77d31fa6c72dc617b67d1c96980c4c457491810792b9",
+    "bytes": 2877
+  }
+}

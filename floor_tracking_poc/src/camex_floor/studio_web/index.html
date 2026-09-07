@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>CAMEX Spatial Studio</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <strong>CAMEX <span>Spatial Studio</span></strong
+      ><select id="projectSelect" aria-label="Project"></select
+      ><button id="newProject">New project</button>
+      <nav>
+        <button id="calibrationTab" class="active">Calibration</button
+        ><button id="trackingTab">MCT runner</button>
+      </nav>
+      <span id="engine"></span>
+    </header>
+    <div id="empty">
+      <h1>Camera calibration</h1>
+      <p id="emptyStatus">Create a site with its floor plan.</p>
+      <button id="emptyCreate">Create project</button>
+    </div>
+    <div id="calibration" class="workspace" hidden>
+      <aside>
+        <div class="section-title">
+          CAMERAS <button id="addCamera">Add</button>
+        </div>
+        <div id="cameraList"></div>
+        <div class="section-title">FLOOR SCALE</div>
+        <label
+          >Known distance (metres)<input
+            id="knownDistance"
+            type="number"
+            value="1"
+            min="0.01"
+            step="0.1" /></label
+        ><button id="measure">Measure on plan</button
+        ><label>Pixels / metre<input id="ppm" type="number" step="0.1" /></label
+        ><button id="saveScale">Save scale</button>
+        <div class="section-title">LAYER</div>
+        <select id="layer">
+          <option value="points">Floor points</option>
+          <option value="allpoints">All 3D points</option>
+          <option value="image">Image ground projection</option>
+          <option value="none">Hidden</option></select
+        ><label
+          >Opacity<input
+            id="opacity"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value="0.65"
+        /></label>
+        <div class="pair">
+          <label
+            >Rotation delta<input
+              id="angle"
+              type="number"
+              value="0"
+              step="1" /></label
+          ><label
+            >Scale multiplier<input
+              id="scale"
+              type="number"
+              value="1"
+              min="0.1"
+              max="10"
+              step="0.02"
+          /></label>
+        </div>
+        <button id="transform">Apply adjustment</button
+        ><button id="drag">Drag layer</button
+        ><button id="lock">Lock camera</button
+        ><button id="visibility">Hide camera</button>
+        <button
+          id="removeCamera"
+          class="danger"
+          title="Remove the selected camera from this project; keep its files"
+        >
+          Remove camera
+        </button>
+      </aside>
+      <main>
+        <div class="canvas-title">
+          GLOBAL FLOOR PLAN <span id="mapMode"></span>
+        </div>
+        <canvas id="floorCanvas"></canvas>
+        <div class="finish">
+          <span id="siteState"></span
+          ><button id="finish">Finish calibration</button
+          ><button id="finishPreview">Save preview</button>
+        </div>
+      </main>
+      <section class="inspector">
+        <div class="canvas-title">
+          <strong id="cameraTitle"></strong><span id="cameraState"></span>
+        </div>
+        <div class="tabs">
+          <button data-view="reference" class="active">Reference</button
+          ><button data-view="video">Video</button
+          ><button data-view="review">Calibration review</button>
+        </div>
+        <div id="referenceView">
+          <div id="referenceDetails" role="status"></div>
+          <canvas id="referenceCanvas"></canvas>
+        </div>
+        <div id="videoView" hidden>
+          <video id="sourceVideo" controls preload="metadata"></video
+          ><label
+            >Reference time (seconds)<input
+              id="referenceTime"
+              type="number"
+              min="0"
+              value="0"
+              step="0.1" /></label
+          ><button id="useVideoTime">Use video position</button
+          ><button id="snapshot">Extract reference frame</button>
+        </div>
+        <div id="reviewView" hidden>
+          <img id="reviewImage" alt="Calibration review" /><button
+            id="showUndistortion"
+          >
+            Undistortion</button
+          ><button id="showGeometry">3D top view</button>
+        </div>
+        <div class="controls">
+          <button id="calibrate" class="primary">Calibrate camera</button
+          ><select id="level" aria-label="Leveling method">
+            <option value="auto">Gravity + floor check</option>
+            <option value="gravity">Gravity</option>
+            <option value="floor">Selected floor plane</option></select
+          ><button id="floorRegion">Select floor region</button
+          ><button id="saveRegion" hidden>Save floor region</button>
+        </div>
+        <div class="controls">
+          <div class="segmented">
+            <button id="fitRole" class="active">Fit point</button
+            ><button id="checkRole">Holdout point</button>
+          </div>
+          <button id="undo">Remove last point</button>
+        </div>
+        <div class="controls">
+          <button id="fitHomography">Fit floor mapping</button
+          ><button id="fitLayer">Fit local layer</button
+          ><button id="save">Save</button
+          ><button id="approve">Approve camera</button>
+        </div>
+        <div id="verification"></div>
+        <div id="anchors"></div>
+        <details>
+          <summary>Camera parameters</summary>
+          <pre id="parameters"></pre>
+        </details>
+        <div id="jobPanel">
+          <div id="jobStatus"></div>
+          <progress id="jobProgress" max="1" value="0"></progress>
+          <details>
+            <summary>Processing log</summary>
+            <pre id="jobLog"></pre>
+          </details>
+        </div>
+      </section>
+    </div>
+    <div id="tracking" hidden>
+      <section class="run-controls">
+        <h1>MCT runner</h1>
+        <div class="run-fields">
+          <label
+            >Start (seconds)<input
+              id="runStart"
+              type="number"
+              value="0"
+              min="0"
+              step="0.1" /></label
+          ><label
+            >Duration (seconds)<input
+              id="runDuration"
+              type="number"
+              value="120"
+              min="0.1"
+              step="0.1" /></label
+          ><label
+            >Frames / second<input
+              id="runFps"
+              type="number"
+              value="10"
+              min="1"
+              max="30" /></label
+          ><label
+            >Inference width<input
+              id="runWidth"
+              type="number"
+              value="1280"
+              min="320"
+              max="4096"
+              step="16"
+          /></label>
+        </div>
+        <div id="offsets"></div>
+        <label style="max-width: 220px"
+          >Detection detail<select id="detectorSize">
+            <option value="416">Balanced (416)</option>
+            <option value="640">Detailed (640)</option>
+          </select></label
+        >
+        <div class="controls">
+          <button id="syncPreview">Preview synchronization</button
+          ><button id="run" class="primary">Run MCT and render</button>
+        </div>
+        <div id="runState"></div>
+        <progress id="runProgress" max="1" value="0"></progress>
+        <details>
+          <summary>Run log</summary>
+          <pre id="runLog"></pre>
+        </details>
+      </section>
+      <div id="syncVideos"></div>
+      <section id="output" hidden>
+        <video id="outputVideo" controls></video>
+        <div class="controls">
+          <a id="downloadVideo">Download video</a
+          ><a id="downloadEvents">Tracking events</a
+          ><a id="downloadMetrics">Inference metrics</a>
+        </div>
+      </section>
+    </div>
+    <footer>
+      <span id="status">Loading projects</span><span id="revision"></span>
+    </footer>
+    <dialog id="projectDialog">
+      <form id="projectForm">
+        <h2>New site</h2>
+        <label>Project name<input name="name" required /></label
+        ><label
+          >Floor plan<input
+            name="floor"
+            type="file"
+            accept="image/png,image/jpeg,application/pdf"
+            required /></label
+        ><label
+          >PDF page (first page is 1)<input
+            name="page"
+            type="number"
+            min="1"
+            value="1"
+        /></label>
+        <p class="formStatus"></p>
+        <div class="controls">
+          <button type="button" data-close="projectDialog">Cancel</button
+          ><button type="submit" class="primary">Create site</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="cameraDialog">
+      <form id="cameraForm">
+        <h2>Add camera</h2>
+        <label
+          >Camera ID<input name="id" pattern="[A-Za-z0-9_-]+" required /></label
+        ><label>Display name<input name="label" /></label
+        ><label
+          >Video file<input
+            name="video"
+            type="file"
+            accept="video/*,.avi,.mkv,.dav"
+            required
+        /></label>
+        <p class="formStatus"></p>
+        <div class="controls">
+          <button type="button" data-close="cameraDialog">Cancel</button
+          ><button type="submit" class="primary">Add camera</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="removeCameraDialog" aria-labelledby="removeCameraTitle">
+      <form id="removeCameraForm">
+        <h2 id="removeCameraTitle">Remove camera?</h2>
+        <p id="removeCameraMessage"></p>
+        <p>
+          The video, calibration files and past runs will be retained. New runs
+          will exclude this camera. Finish calibration or save a preview again
+          afterward.
+        </p>
+        <p class="formStatus" role="alert"></p>
+        <div class="controls">
+          <button type="button" data-close="removeCameraDialog">Cancel</button>
+          <button type="submit" id="confirmRemoveCamera" class="danger">
+            Remove camera
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

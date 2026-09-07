@@ -3,6 +3,10 @@
 A simple Python script that recognizes known people in a video by comparing detected faces
 against a folder of reference (staff) photos, using InsightFace face embeddings.
 
+## Floor-map Calibration and Tracking
+
+The separate [floor_tracking_poc](floor_tracking_poc/README.md) integration preview provides camera calibration, floor-plan alignment, fresh multi-camera tracking and a rendered floor-map demonstration. See its [handoff guide](floor_tracking_poc/docs/HANDOFF.md) for installation, the companion test/model bundles and current limitations. The face-recognition script below is unchanged.
+
 ## What it does
 
 1. Loads the InsightFace `buffalo_l` model (GPU if available, CPU as fallback).

@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "models": {
+    "geocalib": {"filename": "geocalib_distorted.tar", "sha256": "13cc505928e3ff4eb26c00bff73861ab2b11b804a546323456cf5462e1f8f447"},
+    "vggt": {"filename": "vggt_commercial.safetensors", "sha256": "2b766b284359bc47ce26be107254621f685b758a0282082ff109f3ff02788b53"},
+    "detector": {"filename": "yolox_tiny.pth", "sha256": "9de513de589ac98bb92d3bca53b5af7b9acfa9b0bacb831f7999d0f7afaee8f0"},
+    "reid": {"filename": "osnet_ibn_x1_0_msmt17_combineall.pth", "sha256": "2aca54945043301c82fe1a08bb22b045adb0c210673cb8319f0d4f44778f0566"},
+    "pose": {"filename": "yolo11n-pose.pt", "sha256": "869e83fcdffdc7371fa4e34cd8e51c838cc729571d1635e5141e3075e9319dc0"}
+  },
+  "note": "Evaluated model assets are distributed separately from source. Inclusion is not deployment clearance. Replacing models requires an explicit reviewed manifest and compatibility test."
+}
