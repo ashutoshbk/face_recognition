@@ -1,0 +1,16 @@
+*
+!pyproject.toml
+!src/
+!src/**
+!engines/
+!engines/**
+!gpu/
+!gpu/**
+!tests/
+!tests/**
+!examples/
+!examples/**
+**/__pycache__
+**/*.pyc
+**/.git
+**/*.egg-info

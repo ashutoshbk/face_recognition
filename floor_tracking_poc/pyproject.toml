@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "camex-spatial-pipeline"
+version = "0.3.1"
+description = "Complete camera calibration and floor tracking workflow"
+requires-python = ">=3.10,<3.13"
+dependencies = ["numpy==1.26.4", "scipy==1.14.1", "opencv-python-headless==4.10.0.84", "Pillow==11.3.0", "PyMuPDF==1.26.4"]
+
+[project.scripts]
+camex-studio = "camex_floor.studio:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+camex_floor = ["web/*", "studio_web/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
