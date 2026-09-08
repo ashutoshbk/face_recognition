@@ -16,8 +16,16 @@ before presenting deployment claims. Unknown is not proof that someone is an out
 
 ## 1. Get the Code and Test Kit
 
-Check out the PR branch, then enter `face_id_poc/`. Extract the separately supplied
-`CAMEX_Face_ID_Test_Kit_0.1.1.zip` outside the repository:
+For a new checkout (GitHub access to the private repository is required):
+
+```bash
+git clone --branch codex/camex-face-id-v0.1.1 https://github.com/ashutoshbk/face_recognition.git
+cd face_recognition/face_id_poc
+```
+
+For an existing checkout, preserve your work, fetch the new branch, switch to it,
+and enter `face_id_poc/`. The branch can be tested before its PR is merged.
+Extract the separately supplied `CAMEX_Face_ID_Test_Kit_0.1.1.zip` outside the repository:
 
 ```text
 CAMEX_Face_ID_Test_Kit_0.1.1/

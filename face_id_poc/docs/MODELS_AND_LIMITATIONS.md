@@ -51,6 +51,10 @@ commercial permission. The same distinction applies to standard InsightFace
 pretrained packs used in the original application.
 
 Source: [official InsightFace license guidance](https://github.com/deepinsight/insightface/tree/master/python-package#license).
+InsightFace's [main repository licensing section](https://github.com/deepinsight/insightface#license)
+lists `recognition-oss-pack@insightface.ai` for licensing its public face-recognition
+models. Ask about the exact ArcFace and SCRFD assets and the intended client use;
+do not assume one permission also clears the independently supplied head model.
 See [MODEL_PROVENANCE.md](../MODEL_PROVENANCE.md) and the retained third-party notices.
 This is an evaluation/integration preview, not a license clearance or production
 accuracy certification.
