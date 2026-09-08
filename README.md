@@ -82,3 +82,10 @@ pip install opencv-python numpy insightface onnxruntime-gpu
   falls back to CPU if GPU init fails.
 - Recognition accuracy depends heavily on reference photo quality — use frontal,
   well-lit, unobstructed faces.
+
+## Standalone Face ID and Head Tracking PoC
+
+The independent [face_id_poc](face_id_poc/) folder provides enrollment, head
+tracking, multi-frame face identification, an optional demo renderer, and a
+frame-in/results-out integration API. Start with its README for setup and testing.
+It does not replace the original `main.py` application.
