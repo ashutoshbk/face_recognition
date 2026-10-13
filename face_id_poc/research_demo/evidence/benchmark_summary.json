@@ -1,0 +1,49 @@
+{
+  "gallery_vectors": 109619,
+  "indexed_vectors": 109619,
+  "dataset_images": 1219995,
+  "dataset_identities": 109999,
+  "queries": 300,
+  "eligible_probes": 393,
+  "dimensions": 512,
+  "hnsw_ef": 256,
+  "search_latency_ms": {
+    "p50": 2.952082999399863,
+    "p95": 3.537760750259622,
+    "p99": 6.105578571441576,
+    "mean": 3.0450245969889997,
+    "maximum": 11.299541998596396,
+    "count": 300
+  },
+  "image_to_results_latency_ms": {
+    "p50": 167.6052080001682,
+    "p95": 620.5186755978501,
+    "p99": 1074.1504651599087,
+    "mean": 255.84433835931122,
+    "maximum": 1214.2093750007916,
+    "count": 25
+  },
+  "ann_recall_at10": 0.9680000000000001,
+  "synthetic_closed_set_top1": 0.7966666666666666,
+  "timing_definition": "Warm sequential localhost gRPC round trip; excludes face encoding, disk image read, UI and exact reference query.",
+  "image_to_results_definition": "Sequential ZIP member read, PNG decode, SCRFD, alignment, ArcFace and local gRPC lookup; model startup excluded; at most 25 fixed probes.",
+  "limitations": "Synthetic closed-set experiment, not real-person recognition accuracy, open-set FAR/TAR, maximum throughput or live surveillance capacity.",
+  "model_hashes": {
+    "arcface-r50-w600k-112x112.onnx": "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43",
+    "scrfd-kps-2.5g-640x640.onnx": "a2a876b5ad23e66a8b3973112ff137f98414c214b17c31a45955d26e54b58cbf"
+  },
+  "qdrant_version": "1.19.2",
+  "hardware": {
+    "machine": "arm64",
+    "system": "macOS-26.5.1-arm64-arm-64bit",
+    "provider": "CPUExecutionProvider"
+  },
+  "source_report_sha256": "3b57c8ca95d117f03e43a54fc012ac4d3a3e5dfc4084e9fd0def1cbb95993df0",
+  "identity_hits": {
+    "top1": 239,
+    "top5": 255,
+    "top10": 257
+  },
+  "gallery_rejections": 380,
+  "probe_rejections": 7
+}

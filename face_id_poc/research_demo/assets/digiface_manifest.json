@@ -1,0 +1,98 @@
+{
+  "source": "https://github.com/microsoft/DigiFace1M",
+  "purpose": "Official synthetic data download manifest for independent non-commercial research.",
+  "license": "LICENSE.official.txt; non-commercial research restrictions apply.",
+  "total_download_bytes": 24878957950,
+  "archives": [
+    {
+      "url": "https://facesyntheticspubwedata.z6.web.core.windows.net/wacv-2023/subjects_0-1999_72_imgs.zip",
+      "file": "subjects_0-1999_72_imgs.zip",
+      "bytes": 2938553163,
+      "etag": "\"0x8DD0F91A114C3C7\"",
+      "status": "verified_size_and_zip_crc",
+      "png_count": 144000,
+      "identity_folder_count": 2000,
+      "uncompressed_image_bytes": 2924179601,
+      "sha256": "29c5347f2287637c646eee7a760cbc392763ecd804e7bb5a9ba6d557fa94f9b3"
+    },
+    {
+      "url": "https://facesyntheticspubwedata.z6.web.core.windows.net/wacv-2023/subjects_2000-3999_72_imgs.zip",
+      "file": "subjects_2000-3999_72_imgs.zip",
+      "bytes": 2936098225,
+      "etag": "\"0x8DD0F919CB32346\"",
+      "status": "verified_size_and_zip_crc",
+      "png_count": 144000,
+      "identity_folder_count": 2000,
+      "uncompressed_image_bytes": 2921566971,
+      "sha256": "0e0edb4f8ff7ddeced29aa3e1e734c62cc097b7a1f63eacbac09aa75f3fba989"
+    },
+    {
+      "url": "https://facesyntheticspubwedata.z6.web.core.windows.net/wacv-2023/subjects_4000-5999_72_imgs.zip",
+      "file": "subjects_4000-5999_72_imgs.zip",
+      "bytes": 2936895527,
+      "etag": "\"0x8DD0F919B8E8A17\"",
+      "status": "verified_size_and_zip_crc",
+      "png_count": 144000,
+      "identity_folder_count": 2000,
+      "uncompressed_image_bytes": 2922363145,
+      "sha256": "d5237cc674351b08f708b0393d7ddea6778c3200a17115eee5a2fbea41e498fa"
+    },
+    {
+      "url": "https://facesyntheticspubwedata.z6.web.core.windows.net/wacv-2023/subjects_6000-7999_72_imgs.zip",
+      "file": "subjects_6000-7999_72_imgs.zip",
+      "bytes": 2940940004,
+      "etag": "\"0x8DD0F91A2EE4CD6\"",
+      "status": "verified_size_and_zip_crc",
+      "png_count": 144000,
+      "identity_folder_count": 2000,
+      "uncompressed_image_bytes": 2926404466,
+      "sha256": "227ab9f733a7b2e4952b283774e83f461484c55d177a185e86d0b69e82d71964"
+    },
+    {
+      "url": "https://facesyntheticspubwedata.z6.web.core.windows.net/wacv-2023/subjects_8000-9999_72_imgs.zip",
+      "file": "subjects_8000-9999_72_imgs.zip",
+      "bytes": 2927632784,
+      "etag": "\"0x8DD0F91A2CBF74E\"",
+      "status": "verified_size_and_zip_crc",
+      "png_count": 144000,
+      "identity_folder_count": 2000,
+      "uncompressed_image_bytes": 2913104278,
+      "sha256": "9510e30f07eb3ec523df95cf83fa5401a3a8fd0c9c0970fbb548d1d2718b9651"
+    },
+    {
+      "url": "https://facesyntheticspubwedata.z6.web.core.windows.net/wacv-2023/subjects_100000-133332_5_imgs.zip",
+      "file": "subjects_100000-133332_5_imgs.zip",
+      "bytes": 3399664847,
+      "etag": "\"0x8DD0F91A40CD256\"",
+      "status": "verified_size_and_zip_crc",
+      "png_count": 166665,
+      "identity_folder_count": 33333,
+      "uncompressed_image_bytes": 3382265265,
+      "sha256": "998253e11e8c3cca20e92fd51a6b6a40dd6661344ee6c0a2e46a8586cd84f641"
+    },
+    {
+      "url": "https://facesyntheticspubwedata.z6.web.core.windows.net/wacv-2023/subjects_133333-166665_5_imgs.zip",
+      "file": "subjects_133333-166665_5_imgs.zip",
+      "bytes": 3398240548,
+      "etag": "\"0x8DD0F91A0C18337\"",
+      "status": "verified_size_and_zip_crc",
+      "png_count": 166665,
+      "identity_folder_count": 33333,
+      "uncompressed_image_bytes": 3380841878,
+      "sha256": "1d99a9512366cbe0b2f51ee19ef847d76adde3fd42097b7aa4c274316b980701"
+    },
+    {
+      "url": "https://facesyntheticspubwedata.z6.web.core.windows.net/wacv-2023/subjects_166666-199998_5_imgs.zip",
+      "file": "subjects_166666-199998_5_imgs.zip",
+      "bytes": 3400932852,
+      "etag": "\"0x8DD0F919F525244\"",
+      "status": "verified_size_and_zip_crc",
+      "png_count": 166665,
+      "identity_folder_count": 33333,
+      "uncompressed_image_bytes": 3383532910,
+      "sha256": "a70f53ae6306ad1266491f2314dffcbd69a1c6cba10b63cc63eb15e248a28606"
+    }
+  ],
+  "total_png_count": 1219995,
+  "total_identity_folders_across_archives": 109999
+}
