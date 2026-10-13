@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-14",
+  "platform": "GitHub-hosted Ubuntu 24.04 x86-64",
+  "python": "3.11.17",
+  "run_url": "https://github.com/ashutoshbk/face_recognition/actions/runs/38427224056",
+  "commit": "602096f2c2b575f208c84c66f753f045c8734c0e",
+  "clean_bootstrap": "passed",
+  "tests_passed": 59,
+  "tests_skipped": 2,
+  "tests_failed": 0,
+  "skipped_reason": "Model/API integration requires separately supplied research weights",
+  "physical_camera_tested": false,
+  "full_gallery_on_linux_tested": false,
+  "gpu_tested": false
+}

@@ -214,5 +214,12 @@ Without model/data assets, unit tests still run; asset-dependent tests report a
 skip rather than claiming model validation. The development run's aggregate
 measurements are in `evidence/benchmark_summary.json`. They are not hardware promises.
 
+Delivery checks on 14 October 2026: Mac clean environment **61 passed**, browser
+enrollment/search/synchronization checks passed, and local synthetic H.264/TCP
+RTSP registration/match/disconnect checks passed. A clean Ubuntu 24.04 CI install
+passed **59 tests with 2 asset-dependent skips**. See `evidence/mac_validation.json`
+and `evidence/ubuntu_validation.json`. The complete gallery was measured on Mac;
+Ubuntu camera/model integration and GPU performance still require separate tests.
+
 The implementation diagram is in [ARCHITECTURE.md](ARCHITECTURE.md). The broader
 parent Face ID PoC remains unchanged; this module has its own environment and data.
