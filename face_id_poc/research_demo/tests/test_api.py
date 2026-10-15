@@ -27,6 +27,13 @@ def test_local_boundary_and_validation(client):
     assert client.post(f"/api/sessions/{identifier}/frame",content=b"x"*2_000_001).status_code == 413
     assert client.post(f"/api/sessions/{identifier}/frame",content=b"invalid JPEG").status_code == 400
     assert client.post("/api/benchmark",json={"count":42}).status_code == 400
+    assert client.post('/api/self-test/enroll-photo',content=b'x'*5_400_001).status_code == 413
+    invalid = client.post('/api/self-test/enroll-photo',json={'name':'Tester','consent':True,'image_base64':'private-marker'*500_000})
+    assert invalid.status_code == 413
+    assert 'private-marker' not in invalid.text
+    assert client.post('/api/self-test/enroll-photo',content=b'{broken').status_code == 422
+    assert client.post('/api/self-test/enroll-photo',json={'name':'Tester','consent':False,'image_base64':'AAAA'}).status_code == 400
+    assert client.get('/api/testers?mode=self').json() == []
     assert client.get("/api/testers").json() == []
     assert client.delete(f"/api/sessions/{identifier}").status_code == 200
     assert client.post(f"/api/sessions/{identifier}/reset").status_code == 404

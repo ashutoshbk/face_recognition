@@ -23,6 +23,10 @@ flowchart TB
   REC --> REG[Explicit enrollment\nBest 3 of up to 5 accepted samples\nQuality-weighted normalized template]
   REG --> LOCAL[Local SQLite\nName, consent, template, preview]
   REG --> SELF[Qdrant self collection\nExactly one real tester]
+  PHOTO[Explicit own-photo upload\nJPEG/PNG; name and consent; camera stopped] --> PQ[One face; size, blur, light and landmark checks\nAlign 112x112; original upload not retained]
+  PQ --> PR[Same recognition child process\nEncode one ArcFace template; no lookup]
+  PR --> LOCAL
+  PR --> SELF
   REC --> QUERY[Query synthetic and self collections\nMerge nearest scores]
   SYN --> QUERY
   SELF --> QUERY
@@ -48,9 +52,21 @@ RTSP decoding runs in another child with a one-frame queue and no recording.
 
 Size, sharpness, brightness and landmark geometry reject unsuitable crops.
 The background worker encodes eligible aligned crops at most once per second.
-Up to five recent high-quality samples are retained; explicit registration uses
-the best three. Only that authorized template and a preview are saved. Registration
-does not enroll the full video or every captured frame.
+Up to five high-quality samples from the same head are retained for 30 seconds;
+explicit webcam registration uses the best three. Head continuity allows a gap
+shorter than two seconds; longer gaps, track changes and ambiguity reset capture.
+A good crop already in flight can enter the sample pool during a later quality
+dip only if the same head and capture generation are still current. It cannot
+publish an identity verdict while the current face is unusable. Capture samples
+and live recognition therefore have separate invalidation generations.
+
+Alternatively, the tester explicitly uploads their own single photo with name and
+consent while live capture is stopped. One face and the same quality gates are
+required. The recognition child encodes one normalized ArcFace template; no
+webcam sample requirement is silently bypassed. Both routes save only the aligned
+preview and template, enforce the one-self-profile cap, and remove the local
+profile if Qdrant registration fails. Any partial remote write is rejected by
+tester ID until a valid enrollment exists. The original photo is not retained.
 
 ## Recognition Isolation and Search
 

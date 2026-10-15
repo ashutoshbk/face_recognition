@@ -8,7 +8,7 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -17,6 +17,7 @@ from core import Engine, Gallery, Session, decode_image, MODEL_ID
 from self_test import SelfSearch, SelfSession
 from recognition_process import ProcessRecognizer
 from rtsp_input import RTSPInput
+from photo_enrollment import PhotoEnrollment
 from settings import DATA,MODELS
 
 ROOT = Path(__file__).resolve().parent
@@ -38,6 +39,7 @@ gallery = Gallery(DATA / "testers")
 self_gallery = Gallery(DATA / 'self_tester', max_testers=1)
 self_search = SelfSearch(ROOT, self_gallery, os.environ.get('LOCAL_SELF_TEST_COLLECTION','local_single_self_test_arcface_r50_v1'))
 recognizer=ProcessRecognizer(ROOT,DATA/'self_tester',self_search.personal_collection)
+photo_enrollment=PhotoEnrollment(engine,recognizer,self_search)
 benchmark = Benchmark(DATA / "benchmarks")
 sessions = {}
 rtsp_sources = {}
@@ -88,7 +90,7 @@ def index():
 
 @app.get("/api/health")
 def health():
-    return {'ready':True,'model':'YOLOX + SCRFD + ArcFace','model_id':MODEL_ID,'dimensions':512,
+    return {'ready':True,'release':'2026-10-15-enrollment','model':'YOLOX + SCRFD + ArcFace','model_id':MODEL_ID,'dimensions':512,
             'tracker':'ByteTrack / head boxes','mode':'local selected-tester 1:1 verification',
             'tester_count':len(gallery.list()),'legacy_sface_testers':gallery.legacy_count(),
             'recognition_worker':recognizer.status(),'tracking_pid':os.getpid()}
@@ -157,7 +159,7 @@ def rtsp_frame(identifier):
     if not source:raise HTTPException(404,'No test stream connected')
     try:sequence,image=source.read()
     except ValueError:
-        with session.lock:session.clear_capture()
+        with session.lock:session.clear_capture('RTSP source has no fresh frame')
         raise HTTPException(503,'Waiting for a fresh RTSP frame; check reachability, credentials and codec')
     return Response(image,media_type='image/jpeg',headers={'X-Source-Frame':str(sequence)})
 
@@ -199,6 +201,26 @@ class Enrollment(BaseModel):
     name: str = Field(min_length=1, max_length=60)
     consent: bool
     track_id: str
+
+
+class PhotoForm(BaseModel):
+    name: str = Field(min_length=1,max_length=60)
+    consent: bool
+    image_base64: str = Field(min_length=4,max_length=5_333_336)
+
+
+@app.post('/api/self-test/enroll-photo')
+async def enroll_photo(request: Request):
+    chunks=[];size=0
+    async for chunk in request.stream():
+        size+=len(chunk)
+        if size>5_400_000:raise HTTPException(413,'Photo request exceeds 4 MB image limit')
+        chunks.append(chunk)
+    try:form=PhotoForm.model_validate_json(b''.join(chunks))
+    except ValidationError:raise HTTPException(422,'Provide a name, consent and a JPEG/PNG photo up to 4 MB')
+    if any(isinstance(s,SelfSession) and s.active_id and time.monotonic()-s.last_seen<2.5 for s in sessions.values()):
+        raise HTTPException(409,'Stop live capture before photo enrollment')
+    return await run_in_threadpool(photo_enrollment.enroll,form.name,form.consent,form.image_base64)
 
 
 @app.post("/api/sessions/{identifier}/enroll")
@@ -260,7 +282,10 @@ def recognition_previews(identifier,epoch:int,sequence:int):
 @app.get("/api/sessions/{identifier}/export")
 def export_session(identifier):
     session = session_for(identifier)
-    return JSONResponse({"scope": "Anonymous local session metrics; no face images or descriptors", "events": list(session.events)}, headers={"Content-Disposition": "attachment; filename=session_metrics.json"})
+    with session.lock:
+        diagnostics={key:session.last_frame.get(key) for key in ('head_status','head_count','face_count','quality','capture','timing','recognition')} if session.last_frame else None
+        return JSONResponse({"scope": "Anonymous local session metrics; no face images or descriptors", "events": list(session.events),
+            'capture_events':list(session.capture_events),'latest_diagnostics':diagnostics}, headers={"Content-Disposition": "attachment; filename=session_metrics.json"})
 
 
 class BenchmarkSettings(BaseModel):

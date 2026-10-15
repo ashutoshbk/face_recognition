@@ -209,6 +209,14 @@
               ><button id="enroll" class="primary full" disabled>
                 <i data-lucide="user-round-plus"></i>Register best 3 samples
               </button>
+              <button id="enroll-photo" class="full photo-enroll" hidden disabled title="Enroll your own JPEG or PNG photo while the camera is stopped">
+                <i data-lucide="image-up"></i>Register from photo
+              </button>
+              <input type="file" id="enrollment-photo" accept="image/jpeg,image/png" hidden />
+              <div class="capture-diagnostics" role="status">
+                <strong id="capture-status">Waiting for capture</strong>
+                <span id="capture-reset">No samples collected</span>
+              </div>
             </section>
             <section class="side-section settings">
               <h2>Capture settings</h2>

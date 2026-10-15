@@ -100,6 +100,15 @@ class SelfSearch:
             q.upsert(self.personal_collection,points=[models.PointStruct(id=SELF_POINT,vector=record['template'].tolist(),
                 payload={'kind':'self','tester_id':identifier,'model_id':MODEL_ID})],wait=True)
 
+    def register_or_rollback(self, identifier):
+        try:
+            self.register(identifier)
+        except Exception:
+            # SQLite must not keep an unusable enrollment if Qdrant is offline.
+            # A late/partial Qdrant point is rejected by tester_id on every lookup.
+            self.gallery.delete(identifier)
+            raise
+
     def delete(self, identifier):
         with self.lock:
             self.gallery.get(identifier)
@@ -235,6 +244,7 @@ class SelfSession(Session):
 
     def reset(self):
         super().reset()
+        self._head_observed_now=False
         self.search_evidence=SearchEvidence()
         self.search_events=deque(maxlen=200)
         self._invalidate_recognition()
@@ -248,8 +258,8 @@ class SelfSession(Session):
         if hasattr(self,'search_evidence'):
             self.search_evidence.clear()
 
-    def clear_capture(self):
-        super().clear_capture()
+    def clear_capture(self, reason='Capture reset'):
+        super().clear_capture(reason)
         self._invalidate_recognition()
 
     def close(self):
@@ -258,20 +268,23 @@ class SelfSession(Session):
             self.clear_capture()
 
     def _current_job(self,job):
-        return (not self._closed and job['epoch']==self._epoch and self._usable_now
-            and self.active_id==job['track_id'] and self.selected==job['selected']
-            and self.last_used-job['timestamp']<=self.recognition_ttl)
+        return self._current_capture_job(job) and job['epoch']==self._epoch and self._usable_now
+
+    def _current_capture_job(self,job):
+        return (not self._closed and job['capture_epoch']==self._capture_epoch
+            and self._head_observed_now and self.active_id==job['track_id'] and self.selected==job['selected']
+            and max(self.last_used,time.monotonic())-job['timestamp']<=self.recognition_ttl)
 
     def _recognize(self,engine,job):
         try:
             with self.lock:
-                if not self._current_job(job):
+                if not self._current_capture_job(job):
                     return
             started=time.perf_counter()
             feature=engine.encode_crop(job['crop'])
             encoding_ms=(time.perf_counter()-started)*1000
             with self.lock:
-                if not self._current_job(job):
+                if not self._current_capture_job(job):
                     return
             found=self.search.search(feature,job['selected'])
             recognition_ms=(time.perf_counter()-started)*1000
@@ -291,16 +304,19 @@ class SelfSession(Session):
                 self._worker_busy=False
 
     def _accept_result(self,job,packet):
-        if not self._current_job(job):return
+        if not self._current_capture_job(job):return
         if packet.get('error'):
             self.last_search=None;self.search_evidence.clear();self._search_error=packet['error'];return
         feature,found=packet['feature'],packet['found']
         if self.last_feature is not None and float(np.dot(feature,self.last_feature))<.35:
-            self.candidates.clear();self.search_evidence.clear();self._pending=None
+            self.clear_capture('Face appearance consistency check changed')
         self.last_feature=feature;self.last_sample=job['timestamp']
         sample={'timestamp':job['timestamp'],'quality':job['quality'],'feature':feature,'jpeg':packet['photo']}
         self.candidates=sorted(self.candidates+[sample],key=lambda c:c['quality'],reverse=True)[:5]
         self.recognition_completed+=1
+        # A good earlier crop can join enrollment while a later frame is blurred.
+        # Its identity verdict still requires the current usable-face epoch.
+        if not self._current_job(job):return
         self.last_search={**found,'encoding_ms':packet['encoding_ms'],'recognition_ms':packet['recognition_ms'],
             'sample_timestamp':job['timestamp'],'completed_at':packet['completed_at'],
             'source_frame_id':job['frame_id'],'source_sequence':job['sequence'],
@@ -333,7 +349,7 @@ class SelfSession(Session):
                 or quality>=self._pending['quality']):
             self._pending={'crop':align_face(frame,self.current_face),'quality':quality,
                 'timestamp':now,'track_id':self.active_id,'selected':self.selected,'threshold':self.threshold,
-                'epoch':self._epoch,'frame_id':result['frame_id'],'sequence':result['sequence']}
+                'epoch':self._epoch,'capture_epoch':self._capture_epoch,'frame_id':result['frame_id'],'sequence':result['sequence']}
         if self._worker_busy or now<self._next_recognition_at:
             return
         job=self._pending
@@ -361,6 +377,7 @@ class SelfSession(Session):
             result['face_checked']=True
             result['face_sample_age_ms']=0
             usable=bool(result['active_id'] and result['quality'] and result['quality']['accepted'] and result['face_associated'])
+            self._head_observed_now=bool(result['active_id'] and result['head_status']=='Head tracked')
             if not usable:
                 self._invalidate_recognition()
             else:
@@ -383,6 +400,7 @@ class SelfSession(Session):
             result['samples']=[{'quality':c['quality'],'age_seconds':round(now-c['timestamp'],1),'image':data_url(c['jpeg'])} for c in self.candidates]
             times=[c['timestamp'] for c in self.candidates]
             result['enrollment_ready']=bool(usable and len(times)>=3 and max(times)-min(times)>=.65)
+            result['capture']=self.capture_status(result)
             result['timing']['comparison_ms']=self.last_search['search_ms'] if self.last_search else 0
             result['timing']['embedding_ms']=0.0
             result['recognition_interval_ms']=round(self.recognition_interval*1000)
@@ -411,13 +429,10 @@ class SelfSession(Session):
         with self.lock:
             identifier=super().enroll(name,consent,track_id,gallery)
             try:
-                self.search.register(identifier)
+                self.search.register_or_rollback(identifier)
             except Exception:
-                try:
-                    self.search.delete(identifier)
-                finally:
-                    self.selected=None
-                    self.clear_capture()
+                self.selected=None
+                self.clear_capture('Enrollment failed; no local profile retained')
                 raise
             self.clear_capture()
             return identifier

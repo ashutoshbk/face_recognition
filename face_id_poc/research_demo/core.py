@@ -18,6 +18,9 @@ from vision.association import associate_faces, TurnAwayCheck
 from vision.vendor.face_align import norm_crop
 
 MODEL_ID = 'arcface-r50-w600k-512d-4c06341c'
+HEAD_CONTINUITY_SECONDS = 2.0
+CAPTURE_WINDOW_SECONDS = 30.0
+CAPTURE_FRESHNESS_SECONDS = 2.5
 
 cv2.setNumThreads(2)
 
@@ -182,22 +185,32 @@ class Gallery:
             return self.cache[identifier]
 
     def add(self, name, candidates, consent):
-        name = str(name).strip()
+        chosen = sorted(candidates, key=lambda c: c["quality"], reverse=True)[:3]
         if not consent:
             raise ValueError("Explicit tester consent is required")
-        if not name or len(name) > 60:
-            raise ValueError("Enter a tester name of 1-60 characters")
-        chosen = sorted(candidates, key=lambda c: c["quality"], reverse=True)[:3]
         if len(chosen) < 3:
             raise ValueError("Three accepted samples are required")
         if any(np.asarray(c['feature']).size != 512 for c in chosen):
             raise ValueError('Enrollment requires 512D ArcFace samples')
         template = unit(np.average([c["feature"] for c in chosen], axis=0, weights=[c["quality"] for c in chosen]))
+        return self._store(name, template, chosen[0]['jpeg'], consent, len(chosen))
+
+    def add_photo(self, name, feature, photo, consent):
+        if np.asarray(feature).size != 512:
+            raise ValueError('Enrollment requires a 512D ArcFace sample')
+        return self._store(name, unit(feature), photo, consent, 1)
+
+    def _store(self, name, template, photo, consent, sample_count):
+        name = str(name).strip()
+        if not consent:
+            raise ValueError("Explicit tester consent is required")
+        if not name or len(name) > 60:
+            raise ValueError("Enter a tester name of 1-60 characters")
         identifier = str(uuid.uuid4())
         with self.lock, self.connect() as db:
             if db.execute("SELECT COUNT(*) FROM testers").fetchone()[0] >= self.max_testers:
                 raise ValueError(f"This local gallery permits {self.max_testers} tester(s); delete the existing profile before enrolling another")
-            db.execute("INSERT INTO testers VALUES (?,?,?,?,?,?,1)", (identifier, name, time.time(), template.tobytes(), chosen[0]["jpeg"], len(chosen)))
+            db.execute("INSERT INTO testers VALUES (?,?,?,?,?,?,1)", (identifier, name, time.time(), template.tobytes(), photo, sample_count))
         return identifier
 
     def delete(self, identifier):
@@ -244,7 +257,11 @@ class Session:
         self.reset()
 
     def reset(self):
-        self.tracker = HeadTracker(fps=10, threshold=.4, buffer_seconds=1.0, geometry_fallback=True)
+        self.tracker = HeadTracker(fps=10, threshold=.4, buffer_seconds=HEAD_CONTINUITY_SECONDS, geometry_fallback=True)
+        self._capture_epoch = getattr(self, '_capture_epoch', 0) + 1
+        self.capture_events = deque(maxlen=100)
+        self.capture_reset_count = 0
+        self.last_capture_reset = 'New capture session'
         self.candidates = []
         self.evidence = Evidence()
         self.active_id = None
@@ -260,7 +277,13 @@ class Session:
         self.saved_turnaway = None
         self.current_face = None
 
-    def clear_capture(self):
+    def clear_capture(self, reason='Capture reset'):
+        if self.candidates:
+            self.capture_reset_count += 1
+            self.capture_events.append({'time':time.time(),'reason':reason,'samples_removed':len(self.candidates)})
+        if reason != 'New head track' or self.last_capture_reset == 'New capture session':
+            self.last_capture_reset = reason
+        self._capture_epoch += 1
         self.candidates.clear()
         self.evidence.clear()
         self.last_sample = 0
@@ -270,19 +293,31 @@ class Session:
         with self.lock:
             if settings.get("selected"):
                 gallery.get(settings["selected"])
-            self.selected = settings.get("selected") or None
+            selected = settings.get('selected') or None
+            if (selected == self.selected and settings['minimum_width'] == self.minimum_width
+                    and settings['minimum_sharpness'] == self.minimum_sharpness and settings['threshold'] == self.threshold):
+                return
+            self.selected = selected
             self.minimum_width = settings["minimum_width"]
             self.minimum_sharpness = settings["minimum_sharpness"]
             self.threshold = settings["threshold"]
-            self.clear_capture()
+            self.clear_capture('Capture settings or profile changed')
+
+    def capture_status(self, result):
+        reason = ', '.join((result.get('quality') or {}).get('reasons', []))
+        return {'samples':len(self.candidates),'required':3,'ready':result['enrollment_ready'],
+            'state':'Ready' if result['enrollment_ready'] else 'Collecting' if result.get('quality',{} ) and result['quality']['accepted'] else 'Paused',
+            'pause_reason':reason or (result['head_status'] if not result.get('face_associated') else ''),
+            'last_reset':self.last_capture_reset,'reset_count':self.capture_reset_count,
+            'sample_window_seconds':CAPTURE_WINDOW_SECONDS,'head_gap_limit_seconds':HEAD_CONTINUITY_SECONDS}
 
     def process(self, engine, frame, gallery, now=None, encode_samples=True, frame_id=None):
         now = time.monotonic() if now is None else now
         with self.lock:
             started = time.perf_counter()
             self.last_used = now
-            if now - self.last_seen > 1.0:
-                self.clear_capture()
+            if self.last_seen and now - self.last_seen >= HEAD_CONTINUITY_SECONDS:
+                self.clear_capture('No continuous head observation for 2 seconds')
                 self.active_id = None
             self.sequence += 1
             self.current_face=None
@@ -305,8 +340,11 @@ class Session:
                                  'box':[round(float(v),1) for v in np.r_[box[:2],box[2:]-box[:2]]],
                                  'face_box':[round(float(v),1) for v in face[:4]] if face is not None else None,
                                  'detector_score':round(float(track['score']),3)})
-            self.candidates = [c for c in self.candidates if now-c['timestamp'] < 8]
-            if now-self.last_sample > 8:
+            retained = [c for c in self.candidates if now-c['timestamp'] < CAPTURE_WINDOW_SECONDS]
+            if len(retained) != len(self.candidates):
+                self.capture_events.append({'time':time.time(),'reason':'Accepted sample expired','samples_removed':len(self.candidates)-len(retained)})
+            self.candidates = retained
+            if now-self.last_sample > CAPTURE_WINDOW_SECONDS:
                 self.last_feature = None
             result = {'sequence':self.sequence,'frame_id':frame_id,'width':frame.shape[1],'height':frame.shape[0],
                       'face_count':len(faces),'head_count':head_count,'tracks':overlays,'quality':None,'samples':[],
@@ -316,7 +354,7 @@ class Session:
                       'timing':{'detection_ms':round(detect_ms,2),'head_detection_ms':round(observations.get('head_ms',0),2),
                                 'face_detection_ms':round(observations.get('face_ms',0),2),'embedding_ms':0.0,'comparison_ms':0.0}}
             if head_count > 1 or len(faces) > 1 or ambiguous:
-                self.clear_capture()
+                self.clear_capture('Ambiguous head/face association' if ambiguous else 'Multiple heads or faces detected')
                 self.active_id = None
                 result['verification']['state'] = 'Ambiguous association: paused' if ambiguous else 'Multiple heads or faces: paused'
                 result['head_status'] = result['verification']['state']
@@ -327,7 +365,7 @@ class Session:
             else:
                 track_id = overlays[0]["id"]
                 if track_id != self.active_id:
-                    self.clear_capture()
+                    self.clear_capture('Head track changed' if self.active_id else 'New head track')
                     self.active_id = track_id
                     self.head_since = now
                 self.last_seen = now
@@ -345,7 +383,7 @@ class Session:
                         aligned, feature = engine.encode(frame, face)
                         result["timing"]["embedding_ms"] = round((time.perf_counter() - encode_start) * 1000, 2)
                         if self.last_feature is not None and float(np.dot(self.last_feature, feature)) < 0.35:
-                            self.clear_capture()
+                            self.clear_capture('Face appearance consistency check changed')
                         self.last_feature = feature
                         self.last_sample = now
                         sample = {"timestamp": now, "quality": quality["score"], "feature": feature, "jpeg": jpeg(aligned)}
@@ -384,6 +422,7 @@ class Session:
                 self.saved_turnaway = self.turnaway.test_id
             result["timing"]["total_ms"] = round((time.perf_counter() - started) * 1000, 2)
             result["selected"] = self.selected
+            result['capture'] = self.capture_status(result)
             self.last_frame = result
             event = {"time": time.time(), "track": result["active_id"], "state": result["verification"]["state"], "quality": result["quality"]["score"] if result["quality"] else None, "processing_ms": result["timing"]["total_ms"]}
             if not self.events or self.events[-1]["state"] != event["state"]:
@@ -392,18 +431,18 @@ class Session:
 
     def start_turnaway(self):
         with self.lock:
-            if not self.last_frame or not self.last_frame['active_id'] or not self.last_frame['quality'] or not self.last_frame['quality']['accepted'] or time.monotonic()-self.last_seen > 1:
+            if not self.last_frame or not self.last_frame['active_id'] or not self.last_frame['quality'] or not self.last_frame['quality']['accepted'] or time.monotonic()-self.last_seen > CAPTURE_FRESHNESS_SECONDS:
                 raise ValueError('A current single head with a clear associated face is required')
             self.turnaway.start(self.active_id,time.monotonic())
             return self.turnaway.snapshot()
 
     def enroll(self, name, consent, track_id, gallery):
         with self.lock:
-            if not self.last_frame or not self.last_frame["enrollment_ready"] or time.monotonic() - self.last_seen > 1:
+            if not self.last_frame or not self.last_frame["enrollment_ready"] or time.monotonic() - self.last_seen > CAPTURE_FRESHNESS_SECONDS:
                 raise ValueError("A current, clear single-person capture is required")
             if self.active_id != track_id:
                 raise ValueError("The active track changed; capture again")
             identifier = gallery.add(name, self.candidates, consent)
             self.selected = identifier
-            self.clear_capture()
+            self.clear_capture('Enrollment completed')
             return identifier

@@ -105,6 +105,32 @@ const body=x=>({method:'PUT',headers:{'Content-Type':'application/json'},body:JS
  if((await request(base+'/api/testers?mode=self')).length)throw Error('Local test profile was not deleted');
  const after=(await request(qdrant+'/collections/'+collection)).result.points_count;
  if(after!==0)throw Error('Qdrant test template was not deleted');
+ await request(`${base}/api/sessions/${session}`,{method:'DELETE'});
+ await page.setViewportSize({width:1440,height:1100});
+ await page.goto(base+'/?mode=self');
+ await page.fill('#tester-name','QA photo self');
+ if(!await page.locator('#enroll-photo').isDisabled())throw Error('Photo enrollment did not require consent');
+ await page.check('#consent');
+ await page.waitForFunction(()=>!document.querySelector('#enroll-photo').disabled);
+ await page.locator('#enrollment-photo').setInputFiles(path.join(root,'qa/synthetic_1.jpg'));
+ await page.waitForFunction(()=>document.querySelector('#tester').selectedOptions[0]?.textContent==='QA photo self',null,{timeout:30000});
+ const photoProfile=(await request(base+'/api/testers?mode=self'))[0];
+ if(photoProfile.samples!==1)throw Error('Photo enrollment did not store exactly one template');
+ const photoPoint=await request(qdrant+'/collections/'+collection+'/points/6290a7d8-6a36-4b56-b2ab-0fce48751585');
+ if(photoPoint.result.payload.tester_id!==photoProfile.id)throw Error('Photo template missing from Qdrant');
+ await page.screenshot({path:path.join(out,'photo-enrolled.png'),fullPage:true});
+ await page.getByRole('button',{name:'Start camera',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('#verdict-label').textContent==='Match · QA photo self',null,{timeout:30000});
+ if(!await page.locator('#enroll-photo').isDisabled())throw Error('Photo upload was enabled during live capture');
+ const capture=await page.locator('#capture-status').textContent();
+ if(!capture.includes('samples'))throw Error('Capture diagnostic missing: '+capture);
+ await page.screenshot({path:path.join(out,'photo-live.png'),fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ await page.screenshot({path:path.join(out,'photo-mobile.png'),fullPage:true});
+ if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('Photo controls overflow mobile');
+ await page.getByRole('button',{name:'Stop camera',exact:true}).click();
+ await request(`${base}/api/testers/${photoProfile.id}?mode=self`,{method:'DELETE'});
+ if((await request(base+'/api/testers?mode=self')).length || (await request(qdrant+'/collections/'+collection)).result.points_count!==0)throw Error('Photo test profile cleanup failed');
  if(hash()!==originalHash)throw Error('Benchmark report modified');
  if((await request(qdrant+'/collections/'+source.collection)).result.points_count!==originalCount)throw Error('Synthetic collection modified');
  if(errors.length)throw Error(errors.join('\n'));
@@ -115,13 +141,14 @@ const body=x=>({method:'PUT',headers:{'Content-Type':'application/json'},body:JS
  const isolation={tracking_pid:steady[0].recognition.tracking_pid,recognition_pid:steady[0].recognition.worker_pid,
    all:summarize(steady),recognition_running:summarize(steady.filter(x=>x.recognition.in_flight)),recognition_idle:summarize(steady.filter(x=>!x.recognition.in_flight)),individual_thumbnail_requests:thumbnailRequests.length};
  fs.writeFileSync(path.join(out,'browser-report.json'),JSON.stringify({passed:true,synthetic_camera_fixture:true,physical_webcam_tested:false,
-   baseline_gallery_unchanged:true,synthetic_gallery_size:originalCount,qa_tester_removed:true,metrics:screenshotMetrics,frame_synchronization:frameMatch,process_isolation:isolation,
+   baseline_gallery_unchanged:true,synthetic_gallery_size:originalCount,qa_tester_removed:true,photo_enrollment_and_match:true,metrics:screenshotMetrics,frame_synchronization:frameMatch,process_isolation:isolation,
    every_analyzed_frame_checks_faces:observations.every(x=>x.face_checked),recognition_samples:observations.slice(-30),
    negative_at_zero_threshold:{state:negative.verification.state,self_score:negative.self_search.self_score,nearest:negative.self_search.candidates[0].label},
    checks:['explicit enrollment writes Qdrant',`${originalCount} synthetic + 1 self query`,'self top1 + threshold + 3/5 votes',
     'threshold slider updates settings','different synthetic face rejected even at zero threshold',
     'five candidate images rendered','desktop/mobile layout','profile removal from SQLite and Qdrant','original benchmark untouched',
-    'changing-frame pixels and overlay IDs match despite injected network delay','face detection every analyzed frame','background recognition timing and gallery size visible']},null,2));
+    'changing-frame pixels and overlay IDs match despite injected network delay','face detection every analyzed frame','background recognition timing and gallery size visible',
+    'single-photo consent gate, enrollment, Qdrant write and live match','single-photo desktop/mobile controls and cleanup']},null,2));
  console.log('Self-test browser QA passed',screenshotMetrics);
 })().catch(async e=>{
  console.error(e);
@@ -129,6 +156,7 @@ const body=x=>({method:'PUT',headers:{'Content-Type':'application/json'},body:JS
  fs.writeFileSync(path.join(out,'failure-diagnostic.json'),JSON.stringify({error:String(e),state,observations:debugObservations.slice(-10)},null,2));
  console.error('QA state',state,debugObservations.slice(-1));process.exitCode=1;
 }).finally(async()=>{
+ if(debugPage)await debugPage.unrouteAll({behavior:'wait'}).catch(()=>{});
  if(browser)await browser.close();server.kill('SIGTERM');
  await fetch(qdrant+'/collections/'+collection,{method:'DELETE'}).catch(()=>{});
 });

@@ -108,13 +108,13 @@ def recognition_worker(root,data,collection,requests,results):
                 start=time.perf_counter()
                 feature=encode_arcface_crop(rec,job['crop'])
                 encoding_ms=(time.perf_counter()-start)*1000
-                found=search.search(feature,job['selected'])
+                found=None if job.get('encode_only') else search.search(feature,job['selected'])
                 total_ms=(time.perf_counter()-start)*1000
                 packet={'kind':'result','token':job['token'],'feature':feature,'found':found,
                     'photo':jpeg(job['crop']),'encoding_ms':encoding_ms,'recognition_ms':total_ms,
                     'completed_at':time.monotonic(),'worker_pid':os.getpid()}
                 results.put(packet)
-                previews.request(found['candidates'])
+                if found is not None:previews.request(found['candidates'])
             except Exception as error:
                 results.put({'kind':'result','token':job['token'],'error':str(error),'worker_pid':os.getpid()})
         previews.close()
@@ -156,15 +156,25 @@ class ProcessRecognizer:
             return {'state':self.state,'pid':self.worker_pid,
                 'in_flight':bool(self.pending),'error':self.error,'kind':'process','threads':1}
 
-    def try_submit(self,crop,selected,callback):
+    def try_submit(self,crop,selected,callback,*,encode_only=False):
         with self.guard:
             if self.state!='ready' or self.pending:return False
             token=uuid.uuid4().hex
             self.pending[token]=callback
-            try:self.requests.put_nowait({'token':token,'crop':crop.copy(),'selected':selected})
+            try:self.requests.put_nowait({'token':token,'crop':crop.copy(),'selected':selected,'encode_only':encode_only})
             except queue.Full:
                 self.pending.pop(token,None);return False
             return True
+
+    def encode_photo(self,crop,timeout=12):
+        done=threading.Event();reply={}
+        def receive(packet):
+            reply.update(packet);done.set()
+        if not self.try_submit(crop,None,receive,encode_only=True):
+            raise ValueError('Recognition worker is busy or warming. Stop live capture and retry shortly.')
+        if not done.wait(timeout):raise ValueError('Photo encoding timed out; no profile was registered')
+        if reply.get('error'):raise ValueError('Photo encoding unavailable; check recognition worker status')
+        return reply['feature']
 
     def preview_images(self,candidates):
         with self.guard:

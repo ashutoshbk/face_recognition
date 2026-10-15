@@ -11,6 +11,47 @@ or unattended CCTV deployment. Read [asset and model restrictions](THIRD_PARTY_N
 before downloading or using the research data. The code does not grant commercial
 rights to the dataset, results or pretrained weights.
 
+## Existing installation: 15 October enrollment update
+
+This update addresses accepted webcam samples disappearing before registration.
+Good samples now survive brief quality dips on the same observed head, within a
+30-second capture window. A two-second head/source gap, ambiguity, track change,
+or changed settings still clears them. Capture status and reset reasons are shown
+next to the samples and included in the session-metrics export.
+
+**No model download, dependency change or gallery rebuild is needed.** Keep your
+existing runtime directory and environment variables. From the existing
+`face_id_poc/research_demo` directory:
+
+```sh
+source .venv/bin/activate
+# Restore your original CAMEX_LAB_HOME / port overrides, if any.
+# If you built quick256, keep: export CAMEX_GALLERY_RUN=quick256
+# For another completed run, use its original CAMEX_GALLERY_RUN value.
+python lab.py stop
+git switch codex/local-face-research-20261014
+git pull --ff-only
+python lab.py start
+```
+
+If Git reports local changes, preserve them rather than resetting the checkout.
+Reopen **http://127.0.0.1:9160/?mode=self** (or your configured port). If the
+browser was open, reload it. `/api/health` reports release
+`2026-10-15-enrollment` for this update. An already saved profile is preserved.
+
+There are now two enrollment choices: the existing three-sample webcam flow,
+or **Register from photo** while the camera is stopped. Enter your name, confirm
+your consent, and choose your own clear frontal JPEG/PNG (under 4 MB, 80-4096 px,
+at most 16 megapixels). Only one profile is permitted; delete the old self profile
+first only if you intend to replace it. A photo must pass the same face-quality
+checks. Then start the webcam or authorized controlled RTSP test feed normally.
+
+Photo enrollment saves one ArcFace template, not three samples, and does not
+establish liveness or validate recognition across different poses. The original
+upload is not retained; only the aligned reference preview and template are saved.
+This remains a single consenting self-test against synthetic distractors, not
+bulk staff registration. This CPU build does not automatically use an RTX GPU.
+
 ## What you need
 
 - Python **3.11**, Git and curl. Mac: Command Line Tools and macOS 14 or later for
@@ -131,6 +172,11 @@ hours. Different machines and workloads require their own timing measurements.
 7. Delete the saved profile with the trash button to re-enroll. Original synthetic
    benchmark results remain unchanged. Do not share your runtime folder.
 
+For the single-photo alternative, follow the enrollment choices in the update
+section above. Both methods use the same isolated Qdrant self collection and live
+threshold/voting checks. The webcam button still requires three accepted crops;
+the photo button is a separate explicit action, not a reduction of that safeguard.
+
 The UI reports detection/tracking FPS, recognition encoding/lookup/total time,
 gallery size and returned candidates. HNSW is approximate: gallery size is not
 the exact number of vectors inspected per query.
@@ -176,6 +222,15 @@ python lab.py start
   other ports; the manager will not kill an unrelated application.
 - Camera permission denied: use localhost or an SSH tunnel, grant browser permission,
   and close another app using the device.
+- Samples pause or reset: read the capture reason below the sample tiles. Brief
+  blur/pose failures pause new sampling; another head, association ambiguity or a
+  two-second head/source gap resets the pool. Keep one tester in view or use photo
+  enrollment. The session download includes bounded reset reasons and timing
+  diagnostics, without photos or descriptors. Do not lower quality checks just to
+  force enrollment.
+- Gallery missing after reopening a terminal: restore `CAMEX_GALLERY_RUN` to the
+  completed quick/full run you used before. Do not delete `.runtime` or rebuild
+  the dataset to solve a missing environment variable.
 - Recognition unavailable: check the completed gallery result and worker status in
   `/api/health`. Recognition failure does not move expensive work into tracking.
 - Stop a foreground build with Ctrl-C; its current completed batches are retained.
@@ -220,6 +275,14 @@ RTSP registration/match/disconnect checks passed. A clean Ubuntu 24.04 CI instal
 passed **59 tests with 2 asset-dependent skips**. See `evidence/mac_validation.json`
 and `evidence/ubuntu_validation.json`. The complete gallery was measured on Mac;
 Ubuntu camera/model integration and GPU performance still require separate tests.
+
+Enrollment update validation: **78 tests passed** on Mac, plus real-model browser
+checks for webcam and photo registration, subsequent matching, desktop/mobile
+layout, separate recognition/tracking processes, and local synthetic RTSP
+registration/match/disconnect. The isolated gallery contained 256 fictional
+references plus one test profile; the full historical benchmark was not rerun.
+See `evidence/enrollment_update_20261015.json` and the latest PR source-test CI.
+Physical Ubuntu webcam/model integration still needs on-device validation.
 
 The implementation diagram is in [ARCHITECTURE.md](ARCHITECTURE.md). The broader
 parent Face ID PoC remains unchanged; this module has its own environment and data.

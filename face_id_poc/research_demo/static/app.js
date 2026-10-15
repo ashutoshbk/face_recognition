@@ -38,6 +38,7 @@ function updateMode() {
   $('analysis-fps-label').textContent=selfMode()?'detection / tracking FPS':'analysis FPS';
   $('threshold-assessment').hidden = !selfMode();
   $('recognition-summary').hidden = !selfMode();
+  $('enroll-photo').hidden = !selfMode();
 }
 async function assessThreshold() {
   if(!selfMode() || !state.testers.length) return;
@@ -158,6 +159,8 @@ function clearView() {
   $("track-id").textContent = "No active track";
   $("gate-state").textContent = "Awaiting camera";
   $("sample-count").textContent = "0 / 5 accepted";
+  $('capture-status').textContent='Waiting for capture';
+  $('capture-reset').textContent='No samples collected';
   $("track-count").textContent = "0 heads / 0 faces";
   $("head-status").textContent = "No head observed";
   $("head-age").textContent = "0.0 s";
@@ -261,6 +264,11 @@ function renderResult(result, roundtrip) {
   $("brightness").textContent = q ? q.brightness : "--";
   $("alignment").textContent = q ? q.frontal.toFixed(2) : "--";
   $("sample-count").textContent = `${result.samples.length} / 5 accepted`;
+  if(result.capture){
+    const c=result.capture;
+    $('capture-status').textContent=`${c.state} · ${c.samples} samples · ${c.required} required`;
+    $('capture-reset').textContent=c.pause_reason || (c.reset_count?`Last reset: ${c.last_reset}`:`${c.reset_count} capture resets`);
+  }
   renderSamples(result.samples);
   const v = result.verification;
   $("verdict-label").textContent = v.state === 'Match' && result.self_search ? `Match · ${result.self_search.self_label}` : v.state;
@@ -379,6 +387,8 @@ function updateEnroll() {
     !state.last?.enrollment_ready ||
     !$("consent").checked ||
     !$("tester-name").value.trim() || (selfMode() && state.testers.length>0);
+  $('enroll-photo').disabled=state.enrolling || state.running || !selfMode() || state.testers.length>0 || !$('consent').checked || !$('tester-name').value.trim();
+  $('enroll-photo').title=state.running?'Stop the camera before photo enrollment':'Enroll your own JPEG or PNG photo (up to 4 MB)';
 }
 async function cameras() {
   const devices = await navigator.mediaDevices.enumerateDevices();
@@ -577,7 +587,7 @@ function reference() {
   $("reference-empty").hidden = !!tester;
   $("reference-name").textContent = tester?.name || "Not selected";
   $("reference-details").textContent = tester
-    ? `${tester.samples} quality-selected samples`
+    ? tester.samples===1?'1 uploaded reference photo':`${tester.samples} quality-selected samples`
     : "Local enrollment";
   $("delete-tester").disabled = !tester;
   if (tester) $("reference-photo").src = `/api/testers/${tester.id}/photo?${modeQuery()}`;
@@ -784,6 +794,26 @@ $("enroll").onclick = async () => {
     state.enrolling = false;
     updateEnroll();
   }
+};
+$('enroll-photo').onclick=()=>{$('enrollment-photo').click();};
+$('enrollment-photo').onchange=async()=>{
+  const file=$('enrollment-photo').files[0];
+  $('enrollment-photo').value='';
+  if(!file)return;
+  if(state.running || !selfMode() || state.enrolling)return;
+  if(!['image/jpeg','image/png'].includes(file.type) || file.size>4_000_000){toast('Choose a JPEG or PNG photo smaller than 4 MB',true);return;}
+  state.enrolling=true;updateEnroll();
+  $('camera-toggle').disabled=true;$('live-mode').disabled=true;
+  try{
+    const encoded=await new Promise((resolve,reject)=>{
+      const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);
+      reader.onerror=()=>reject(new Error('Could not read the selected photo'));reader.readAsDataURL(file);
+    });
+    const result=await api('/api/self-test/enroll-photo',json('POST',{name:$('tester-name').value.trim(),consent:$('consent').checked,image_base64:encoded}));
+    await loadTesters(result.id);$('tester-name').value='';$('consent').checked=false;
+    clearView();toast('Your reference photo is registered in the local self-test gallery');
+  }catch(error){toast(error.message,true);}
+  finally{state.enrolling=false;$('camera-toggle').disabled=false;$('live-mode').disabled=false;updateEnroll();}
 };
 $("delete-tester").onclick = async () => {
   const id = $("tester").value;
