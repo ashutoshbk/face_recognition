@@ -1,0 +1,49 @@
+{
+  "release": "2026-10-15-enrollment",
+  "scope": "Single consenting self-test plus fictional DigiFace distractors; no bulk staff enrollment",
+  "platform": "macOS Apple Silicon, Python 3.11, CPUExecutionProvider",
+  "pytest": {"passed": 78, "failed": 0, "warnings": 1, "duration_seconds": 10.84},
+  "regression_checks": [
+    "Continuous frames 1.25 seconds apart collect three accepted samples on one head",
+    "Good crops survive intervening poor-quality frames within the 30-second window",
+    "Identical settings do not clear accepted samples",
+    "A valid in-flight crop may join enrollment during later blur without publishing a stale identity",
+    "Long head gaps, changed tracks/settings and ambiguous scenes still invalidate capture",
+    "Single-photo quality, consent, size and one-profile constraints remain enforced",
+    "Qdrant registration failure rolls back the local enrollment"
+  ],
+  "browser": {
+    "passed": true,
+    "source": "Changing synthetic webcam fixture with real ONNX models",
+    "synthetic_gallery_size": 256,
+    "self_profiles": 1,
+    "webcam_enrollment_and_match": true,
+    "photo_enrollment_and_match": true,
+    "negative_face_rejected_at_zero_threshold": true,
+    "consent_gate_and_profile_cleanup": true,
+    "desktop_and_mobile_visual_review": true,
+    "preview_and_overlay_frame_ids_match": true,
+    "injected_network_delay_ms": 350,
+    "tracking_and_recognition_separate_processes": true,
+    "sample_displayed_tracking_fps": 8.1,
+    "steady_tracking_frames": 71,
+    "tracking_p50_ms": 111.88,
+    "tracking_p95_ms": 115.74,
+    "gallery_and_original_benchmark_unchanged": true
+  },
+  "rtsp": {
+    "passed": true,
+    "source": "Local synthetic H.264/TCP feed via MediaMTX",
+    "frames_analyzed": 37,
+    "registration_and_match": true,
+    "stream_loss_rejected": true,
+    "temporary_profile_removed": true
+  },
+  "limits": [
+    "This is regression validation with 256 synthetic distractors, not a rerun of the full 109619-identity benchmark",
+    "Physical Ubuntu webcam and the developer's exact symptom have not been reproduced on his machine",
+    "No GPU performance or real-person false-match-rate claim",
+    "One existing Starlette/httpx deprecation warning; no test failures",
+    "Current Ubuntu source-test CI results are linked from PR 4; model assets are not installed in CI"
+  ]
+}

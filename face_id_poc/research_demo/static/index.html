@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AIN Lab | Local Verification Lab</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <script src="/static/lucide.min.js" defer></script>
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <i data-lucide="scan-face"></i>
+        <div><strong>AIN LAB</strong><span>Local Verification Lab</span></div>
+      </div>
+      <div class="header-state">
+        <span class="dot"></span> Local only <span class="divider">|</span>
+        <span id="health">Connecting</span>
+      </div>
+    </header>
+    <nav aria-label="Views">
+      <button class="tab active" data-tab="live">
+        <i data-lucide="camera"></i>Live verification</button
+      ><button class="tab" data-tab="benchmark">
+        <i data-lucide="database"></i>Search benchmark</button
+      ><span class="scope" id="mode-scope">Consenting testers · 1:1 verification</span>
+    </nav>
+    <main>
+      <section id="live-view">
+        <div class="toolbar">
+          <div class="field"><label for="input-source">Input</label><select id="input-source"><option value="webcam">Webcam</option><option value="rtsp">Controlled RTSP test feed</option></select></div>
+          <div class="field"><label for="live-mode">Experiment</label><select id="live-mode">
+            <option value="verify">Selected tester · 1:1</option>
+            <option value="self">My face + synthetic gallery</option>
+          </select></div>
+          <div class="field camera-select">
+            <label for="camera">Camera</label
+            ><select id="camera">
+              <option value="">Default camera</option>
+            </select>
+          </div>
+          <button id="camera-toggle" class="primary">
+            <i data-lucide="video"></i><span>Start camera</span></button
+          ><button
+            id="reset"
+            class="icon"
+            title="Reset tracking and temporary samples"
+            aria-label="Reset tracking and temporary samples"
+          >
+            <i data-lucide="rotate-ccw"></i></button
+          ><button
+            id="export"
+            class="icon"
+            title="Export session metrics"
+            aria-label="Export session metrics"
+          >
+            <i data-lucide="download"></i>
+          </button>
+          <div class="live-metrics">
+            <span hidden><b id="preview-fps">0.0</b> synchronized FPS</span><span><b id="fps">0.0</b> <span id="analysis-fps-label">analysis FPS</span></span
+            ><span><b id="processing">--</b> ms / frame</span
+            ><span id="track-count">0 heads / 0 faces</span>
+          </div>
+        </div>
+        <div id="rtsp-controls" class="rtsp-controls" hidden><label for="rtsp-url">RTSP address</label><input id="rtsp-url" type="password" autocomplete="off" placeholder="rtsp://camera-host:554/stream" />
+          <label class="check"><input type="checkbox" id="rtsp-consent" />I am authorized to use this controlled test feed with consenting participants.</label></div>
+        <div id="recognition-summary" class="recognition-summary" hidden>
+          <span><strong>Recognition</strong> <b id="recognition-status">Waiting</b> <small>max 1 / s</small></span>
+          <span title="Last completed background sample">Encode <b id="recognition-encode-ms">--</b></span>
+          <span title="Last completed Qdrant lookup">Lookup <b id="recognition-lookup-ms">--</b></span>
+          <span title="Last completed encoding plus lookup; excludes foreground head/face detection">Total <b id="recognition-total-ms">--</b></span>
+          <span title="Indexed gallery size; HNSW does not expose the exact number of vectors examined per query.">Gallery size <b id="recognition-gallery-size">--</b></span>
+          <span>Candidates <b id="recognition-candidates">--</b></span>
+        </div>
+        <div class="migration-note" id="model-migration" hidden></div>
+        <div class="workspace">
+          <div class="capture-column">
+            <div class="viewport">
+              <canvas id="preview" width="960" height="540"></canvas
+              ><video id="capture" muted playsinline></video>
+              <div class="empty-camera" id="empty">
+                <i data-lucide="video-off"></i><strong>Camera stopped</strong
+                ><span>Local processing · no video recording</span>
+              </div>
+              <div class="viewport-head">
+                <span id="stream-state">OFFLINE</span
+                ><span id="resolution">960 × 540</span>
+              </div>
+              <div class="viewport-bottom">
+                <span id="track-id">No active track</span
+                ><span id="gate-state">Awaiting camera</span>
+              </div>
+            </div>
+            <div class="continuity-row">
+              <div>
+                <strong>Head continuity</strong
+                ><span id="head-status">No head observed</span>
+              </div>
+              <div>
+                <strong id="head-age">0.0 s</strong
+                ><span>Current head track</span>
+              </div>
+              <button
+                id="turnaway-start"
+                title="Start turn-away continuity check"
+                disabled
+              >
+                <i data-lucide="scan"></i>Turn-away check
+              </button>
+              <button
+                id="turnaway-export"
+                class="icon"
+                title="Export continuity result"
+                aria-label="Export continuity result"
+                disabled
+              >
+                <i data-lucide="download"></i>
+              </button>
+              <span id="turnaway-status" class="continuity-status"
+                >Not started</span
+              >
+            </div>
+            <div class="sample-heading">
+              <h2>Best samples</h2>
+              <span id="sample-count">0 / 5 accepted</span
+              ><span class="muted">Temporary until enrollment</span>
+            </div>
+            <div class="samples" id="samples"></div>
+            <div class="quality-strip">
+              <div>
+                <span>Quality</span><b id="quality-score">--</b
+                ><progress id="quality-bar" max="100" value="0"></progress>
+              </div>
+              <div><span>Face width</span><b id="face-width">--</b></div>
+              <div><span>Sharpness</span><b id="sharpness">--</b></div>
+              <div><span>Brightness</span><b id="brightness">--</b></div>
+              <div><span>Head alignment</span><b id="alignment">--</b></div>
+            </div>
+            <section id="self-search-section" hidden>
+              <div class="sample-heading"><h2>Qdrant nearest candidates</h2><span id="self-gallery-count" class="muted">Connecting</span></div>
+              <div class="self-search-summary"><span>My similarity <b id="self-score">--</b></span><span>Lead over synthetic <b id="self-lead">--</b></span><span>Search <b id="self-search-time">--</b></span></div>
+              <div id="self-candidates" class="self-candidates"></div>
+              <div id="self-search-note" class="muted">No query yet</div>
+            </section>
+            <div class="timeline-heading">
+              <h2>Session events</h2>
+              <span class="muted">State changes only</span>
+            </div>
+            <div class="event-list" id="events">
+              <div class="event-empty">No events yet</div>
+            </div>
+          </div>
+          <aside>
+            <section class="side-section">
+              <h2 id="tester-heading">Selected tester</h2>
+              <select id="tester" aria-label="Selected tester">
+                <option value="">No tester selected</option>
+              </select>
+              <div class="reference">
+                <img id="reference-photo" alt="Enrolled reference" hidden />
+                <div id="reference-empty"><i data-lucide="user-round"></i></div>
+                <div>
+                  <strong id="reference-name">Not selected</strong
+                  ><span id="reference-details">Local enrollment</span>
+                </div>
+                <button
+                  id="delete-tester"
+                  class="icon danger"
+                  title="Delete selected tester"
+                  aria-label="Delete selected tester"
+                  disabled
+                >
+                  <i data-lucide="trash-2"></i>
+                </button>
+              </div>
+              <div class="verdict" id="verdict">
+                <span id="verdict-label">No tester selected</span
+                ><strong id="vote-count">0 / 5</strong
+                ><small>3 matching votes required · 5-sample window</small>
+                <div class="votes" id="votes"></div>
+                <div class="similarity">
+                  <span>Latest similarity</span><b id="similarity">--</b>
+                </div>
+              </div>
+              <div class="settings self-threshold"><label for="threshold">Similarity threshold <output id="threshold-out">0.45</output></label>
+                <input id="threshold" type="range" min="0.00" max="1.00" value="0.45" step="0.01" />
+                <div id="threshold-assessment" hidden><p id="threshold-advice">Current ArcFace enrollment required</p>
+                  <button id="assess-threshold" disabled><i data-lucide="flask-conical"></i>Assess</button>
+                  <button id="apply-threshold" disabled>Use suggestion</button>
+                  <small>Synthetic-negative check only; real-person error rate unmeasured.</small>
+                </div>
+              </div>
+            </section>
+            <section class="side-section">
+              <div class="section-title">
+                <h2>Enrollment</h2>
+                <span id="tester-total" class="muted">0 / 10 testers</span>
+              </div>
+              <label for="tester-name">Tester name</label
+              ><input
+                id="tester-name"
+                maxlength="60"
+                placeholder="Name or test label"
+                autocomplete="off"
+              /><label class="check"
+                ><input type="checkbox" id="consent" /><span id="consent-label">This tester consents to
+                local face enrollment.</span></label
+              ><button id="enroll" class="primary full" disabled>
+                <i data-lucide="user-round-plus"></i>Register best 3 samples
+              </button>
+              <button id="enroll-photo" class="full photo-enroll" hidden disabled title="Enroll your own JPEG or PNG photo while the camera is stopped">
+                <i data-lucide="image-up"></i>Register from photo
+              </button>
+              <input type="file" id="enrollment-photo" accept="image/jpeg,image/png" hidden />
+              <div class="capture-diagnostics" role="status">
+                <strong id="capture-status">Waiting for capture</strong>
+                <span id="capture-reset">No samples collected</span>
+              </div>
+            </section>
+            <section class="side-section settings">
+              <h2>Capture settings</h2>
+              <label for="min-width"
+                >Minimum face width
+                <output id="min-width-out">70 px</output></label
+              ><input
+                id="min-width"
+                type="range"
+                min="50"
+                max="180"
+                value="70"
+                step="5"
+              /><label for="min-sharpness"
+                >Minimum sharpness
+                <output id="min-sharpness-out">45</output></label
+              ><input
+                id="min-sharpness"
+                type="range"
+                min="20"
+                max="200"
+                value="45"
+                step="5"
+              />
+              <div class="status-note">
+                <i data-lucide="shield-alert"></i>Demo threshold · no liveness
+                check
+              </div>
+            </section>
+            <section class="side-section timing">
+              <h2>Pipeline timing</h2>
+              <dl>
+                <dt>Head + face detection</dt>
+                <dd id="detection-time">--</dd>
+                <dt>Alignment + descriptor</dt>
+                <dd id="embedding-time">--</dd>
+                <dt id="comparison-label">Selected-template comparison</dt>
+                <dd id="comparison-time">--</dd>
+                <dt>Face sample age</dt><dd id="face-sample-age">--</dd>
+                <dt>Accepted face samples</dt><dd id="recognition-rate">--</dd>
+                <dt>Request round trip</dt>
+                <dd id="roundtrip-time">--</dd>
+              </dl>
+            </section>
+          </aside>
+        </div>
+      </section>
+      <section id="benchmark-view" hidden>
+        <div class="bench-heading">
+          <div>
+            <h1>Vector search benchmark</h1>
+            <p>Generated numerical vectors · no biometric data</p>
+          </div>
+          <a href="/api/benchmark/export" class="button" id="bench-export"
+            ><i data-lucide="download"></i>Export results</a
+          >
+        </div>
+        <div class="bench-controls">
+          <div class="field">
+            <label for="vector-count">Vector count</label
+            ><select id="vector-count">
+              <option value="10000">10,000</option>
+              <option value="100000" selected>100,000</option>
+              <option value="500000">500,000</option>
+              <option value="1000000">1,000,000</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="dimensions">Dimensions</label
+            ><select id="dimensions">
+              <option value="128">128</option>
+              <option value="512">512</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="queries">Measured queries</label
+            ><select id="queries">
+              <option value="20">20</option>
+              <option value="100" selected>100</option>
+              <option value="300">300</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ef">HNSW ef</label
+            ><select id="ef">
+              <option>64</option>
+              <option selected>128</option>
+              <option>256</option>
+            </select>
+          </div>
+          <button id="run-benchmark" class="primary">
+            <i data-lucide="play"></i>Run benchmark</button
+          ><button
+            id="cancel-benchmark"
+            class="icon"
+            title="Cancel benchmark"
+            aria-label="Cancel benchmark"
+            disabled
+          >
+            <i data-lucide="square"></i>
+          </button>
+        </div>
+        <div class="bench-progress">
+          <span id="bench-state">Ready</span><span id="bench-percent">0%</span
+          ><progress id="bench-progress" max="100" value="0"></progress>
+        </div>
+        <p id="result-label" class="result-label">No completed benchmark</p>
+        <div class="benchmark-metrics">
+          <div>
+            <span>p50 latency</span><strong id="p50">--</strong
+            ><small>ms · local gRPC round trip</small>
+          </div>
+          <div>
+            <span>p95 latency</span><strong id="p95">--</strong
+            ><small>ms · local gRPC round trip</small>
+          </div>
+          <div>
+            <span>Recall @10</span><strong id="recall">--</strong
+            ><small>Against exact vector search</small>
+          </div>
+          <div>
+            <span>Serial query rate</span><strong id="query-rate">--</strong
+            ><small>queries / second · one client</small>
+          </div>
+        </div>
+        <div class="bench-results">
+          <section>
+            <div class="section-title">
+              <h2>Query latency</h2>
+              <span id="chart-caption" class="muted">No completed run</span>
+            </div>
+            <canvas
+              id="latency-chart"
+              width="960"
+              height="280"
+              aria-label="Per-query latency chart"
+            ></canvas>
+          </section>
+          <section>
+            <h2>Run configuration</h2>
+            <dl id="run-info">
+              <dt>Engine</dt>
+              <dd>Qdrant server 1.19.2</dd>
+              <dt>Location</dt>
+              <dd>This Mac · external SSD</dd>
+              <dt>Dataset</dt>
+              <dd>Generated, non-biometric</dd>
+            </dl>
+          </section>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Query</th>
+                <th>Latency</th>
+                <th>Recall @10</th>
+                <th>Nearest vector IDs</th>
+              </tr>
+            </thead>
+            <tbody id="query-examples">
+              <tr>
+                <td colspan="4">No completed run</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="bench-limit">
+          Local database benchmark only. These results do not measure facial
+          accuracy, concurrent production capacity, or end-to-end camera
+          performance.
+        </div>
+      </section>
+    </main>
+    <div id="toast" role="status" hidden></div>
+  </body>
+</html>

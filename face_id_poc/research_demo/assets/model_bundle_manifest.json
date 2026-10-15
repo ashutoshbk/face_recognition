@@ -1,0 +1,23 @@
+{
+  "file": "CAMEX_Research_Models_20261014.zip",
+  "bytes": 182873019,
+  "sha256": "b20a00498d13d9bf9ea65f25122d9b9e3f02084667965f1c84d68afa8426bd86",
+  "models": [
+    {
+      "file": "arcface-r50-w600k-112x112.onnx",
+      "sha256": "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43",
+      "bytes": 174383860
+    },
+    {
+      "file": "scrfd-kps-2.5g-640x640.onnx",
+      "sha256": "a2a876b5ad23e66a8b3973112ff137f98414c214b17c31a45955d26e54b58cbf",
+      "bytes": 3291960
+    },
+    {
+      "file": "yolox-tiny-crowdhuman-416x416.onnx",
+      "sha256": "7880da82285f9cedd92c46c3c8edece6e751ce8558f4be080ea6325d2a19d56e",
+      "bytes": 20184262
+    }
+  ],
+  "distribution": "Separate controlled research handoff. Not committed to Git; no commercial licence clearance implied."
+}

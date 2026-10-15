@@ -1,5 +1,12 @@
 # CAMEX Face ID and Head Tracking
 
+## New Local Research Delivery (14 October 2026)
+
+The separate [Mac/Ubuntu reproduction guide](research_demo/README.md) covers
+the DigiFace/Qdrant benchmark, head tracking, explicit single-tester enrollment,
+webcam and controlled RTSP testing. It does not replace the original PoC below.
+Research data, model weights and personal registrations are not in this repository.
+
 Version 0.1.1. Single-camera review PoC: frames in, head tracks and proposed employee
 identities out. The OpenCV MP4 renderer is optional. No floor calibration, MCT
 package, database, web UI or cloud inference service is required.

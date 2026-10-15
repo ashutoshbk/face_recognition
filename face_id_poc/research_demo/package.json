@@ -1,0 +1,9 @@
+{
+  "name": "camex-local-face-research-qa",
+  "private": true,
+  "scripts": {
+    "test:browser": "node self_test_browser_qa.cjs",
+    "test:gallery": "node synthetic_bench/browser_qa.cjs"
+  },
+  "devDependencies": {"playwright": "1.62.1"}
+}
