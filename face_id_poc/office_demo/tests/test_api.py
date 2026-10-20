@@ -3,6 +3,8 @@ import json
 import io
 import sys
 import zipfile
+import time
+from types import SimpleNamespace
 from pathlib import Path
 
 import cv2
@@ -120,3 +122,46 @@ def test_zip_traversal_rejected(client):
     response = client.post("/api/enroll/preview", data={"consent": "true"},
         files=[("files", ("staff.zip", archive.getvalue(), "application/zip"))])
     assert response.status_code == 400
+
+
+def test_single_reference_review_requires_explicit_approval_and_preserves_anchor(client):
+    module = importlib.import_module("app")
+    manager = module.manager
+    gallery = module.gallery
+    person = gallery.create_person("Synthetic approval test")
+    vector = unit(np.arange(512)+1)
+    gallery.put(person, "registered", b"synthetic-anchor", vector, {"accepted": True, "score": 90})
+    anchor = gallery.people()[0]["anchor_version"]
+    manager.cameras["synthetic"] = SimpleNamespace(generation=1)
+    candidate = dict(id="review-test", person_id=person, person_name="Synthetic approval test",
+        image=b"synthetic-live", vector=unit(np.arange(512)[::-1]+1),
+        quality={"accepted":True,"score":85}, epoch=manager.epoch, expires=time.monotonic()+60,
+        camera_id="synthetic", camera_generation=1, track_id="1", evidence={"count":5},
+        anchor_version=anchor, registered_revision=gallery.registered_revision(),
+        policy="single_reference_review", review_required=True)
+    manager.candidates[candidate["id"]] = candidate
+    for payload in ({}, {"identity_verified":False}, {"identity_verified":"true"}):
+        r = client.post("/api/candidates/review-test/approve", json=payload)
+        assert r.status_code == 400 and "review-test" in manager.candidates
+        assert gallery.people()[0]["live"] == []
+    r = client.post("/api/candidates/review-test/approve", json={"identity_verified":True})
+    assert r.status_code == 200, r.text
+    assert "review-test" not in manager.candidates
+    result = gallery.people()[0]
+    assert len(result["registered"]) == len(result["live"]) == 1
+    assert result["anchor_version"] == anchor
+    assert gallery.references()[-1]["metadata"]["operator_verified"] is True
+
+
+def test_single_reference_mode_never_accepts_automatic_setting(client):
+    assert client.post("/api/settings", json={"single_reference_mode":"auto"}).status_code == 400
+    assert client.post("/api/settings", json={"single_reference_mode":"review"}).status_code == 200
+    assert client.post("/api/settings", json={"single_reference_mode":"off"}).status_code == 200
+
+
+def test_face_detail_mode_does_not_change_identity_threshold(client):
+    threshold=client.get("/api/state").json()["settings"]["match_threshold"]
+    assert client.post("/api/settings", json={"face_detection_mode":"head_detail"}).status_code == 200
+    state=client.get("/api/state").json()["settings"]
+    assert state["match_threshold"]==threshold and state["face_min_width"]==70
+    assert client.post("/api/settings", json={"face_detection_mode":"unknown"}).status_code == 400

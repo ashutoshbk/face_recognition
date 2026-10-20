@@ -18,6 +18,8 @@ def main():
                         choices=["CUDAExecutionProvider", "CPUExecutionProvider"])
     parser.add_argument("--exercise-models", action="store_true",
                         help="Run one blank tensor per model; assert CUDA nodes for GPU mode")
+    parser.add_argument("--face-model", default=os.environ.get("CAMEX_OFFICE_FACE_MODEL", "scrfd_2.5g"),
+                        choices=["scrfd_2.5g", "scrfd_10g"])
     args = parser.parse_args()
     os.umask(0o077)
     if args.models is None:
@@ -31,6 +33,7 @@ def main():
     import numpy as np
     import onnxruntime as ort
     from vision.networks import MODEL_HASHES, sha256
+    from vision_backend import face_model_spec
     if not np.__version__.startswith("1."):
         raise RuntimeError("Use the NumPy 1.26.4 pin, not NumPy 2")
     if ort.__version__ != "1.18.0":
@@ -44,8 +47,12 @@ def main():
     result = {"python": platform.python_version(), "machine": platform.machine(),
               "numpy": np.__version__, "onnxruntime": ort.__version__,
               "requested_provider": args.provider, "available_providers": ort.get_available_providers(),
-              "synthetic_execution": args.exercise_models, "models": []}
-    for name, expected in MODEL_HASHES.items():
+              "synthetic_execution": args.exercise_models, "face_model": args.face_model, "models": []}
+    hashes = dict(MODEL_HASHES)
+    hashes.pop("scrfd-kps-2.5g-640x640.onnx")
+    face_filename, face_hash = face_model_spec(args.face_model)
+    hashes[face_filename] = face_hash
+    for name, expected in hashes.items():
         model = models / name
         if not model.is_file() or sha256(model) != expected:
             raise RuntimeError(f"Missing or checksum-mismatched supplied model: {name}")
@@ -65,7 +72,8 @@ def main():
                 for value in session.get_inputs():
                     if value.type != "tensor(float)":
                         raise RuntimeError(f"Unexpected input type in supplied model: {name}")
-                    shape = [n if isinstance(n, int) and n > 0 else 1 for n in value.shape]
+                    shape = [n if isinstance(n, int) and n > 0 else (640 if name==face_filename and i>=2 else 1)
+                             for i,n in enumerate(value.shape)]
                     tensors[value.name] = np.zeros(shape, dtype=np.float32)
                 session.run(None, tensors)
                 events = json.loads(Path(session.end_profiling()).read_text())

@@ -31,7 +31,7 @@ def main():
     root = office.parent
     if not (office / "app.py").is_file():
         parser.error("office_demo/app.py is not ready; finish the backend before building")
-    selected = [office / "Dockerfile", *office.glob("requirements*.txt"),
+    selected = [office / "Dockerfile", office / "models_manifest.json", *office.glob("requirements*.txt"),
                 *office.glob("*.py"), office / "static", office / "scripts",
                 root / "research_demo" / "vision", root / "research_demo" / "core.py"]
     with tempfile.TemporaryDirectory(prefix="camex-office-build-") as temp:
@@ -40,7 +40,7 @@ def main():
             copy_source(source, context / source.relative_to(root))
         shutil.copy2(office / ".dockerignore", context / ".dockerignore")
         subprocess.run(["docker", "build", "--platform", "linux/amd64", "--file",
-                        "office_demo/Dockerfile", "--tag", args.tag, str(context)], check=True)
+                        str(context / "office_demo/Dockerfile"), "--tag", args.tag, str(context)], check=True)
 
 
 if __name__ == "__main__":

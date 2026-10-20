@@ -9,6 +9,7 @@
   const icons = (root = document) => window.lucide?.createIcons({root, attrs: {'aria-hidden': 'true'}});
   const running = (camera) => ['running', 'starting', 'connecting', 'reconnecting', 'active'].includes(String(camera.state).toLowerCase());
   const app = {tab: 'cameras', data: null, connected: false, busy: new Set(), cameras: new Map(), peopleKey: '', candidatesKey: '', candidates: []};
+  const candidateReview = {candidate: null, key: '', busy: false, referenceLoaded: false, cropLoaded: false};
   let stateTimer, stateFlight, candidateTimer, candidateFlight, toastTimer;
   let disposed = false;
 
@@ -121,7 +122,7 @@
       this.element.dataset.id = this.id;
       this.element.innerHTML = '<div class="camera-header"><div class="camera-title"><h3></h3><div class="camera-source"></div></div><div class="camera-controls"><button class="icon-button" data-action="camera-toggle"><i data-lucide="play"></i></button><button class="icon-button danger" data-action="camera-delete" title="Delete camera" aria-label="Delete camera"><i data-lucide="trash-2"></i></button></div></div>' +
         '<div class="camera-frame"><img hidden><div class="frame-placeholder"><i data-lucide="video-off"></i><span>Camera stopped</span></div><span class="frame-state" hidden></span></div>' +
-        '<div class="camera-info"><span class="camera-status badge neutral"></span><span class="camera-track-count"></span><span class="camera-fps"></span></div><div class="track-list"></div><details class="camera-evidence"><summary>Track evidence</summary><div class="evidence-body"></div></details><div class="camera-error notice error" hidden></div>';
+        '<div class="camera-info"><span class="camera-status badge neutral"></span><span class="camera-track-count"></span><span class="camera-fps"></span></div><div class="track-list"></div><details class="camera-evidence"><summary>Track evidence / Best-quality crops</summary><div class="evidence-body"></div></details><div class="camera-error notice error" hidden></div>';
       this.img = this.element.querySelector('img');
       this.frame = this.element.querySelector('.camera-frame');
       this.frame.dataset.id = this.id;
@@ -136,7 +137,7 @@
       if (this.camera && this.camera.generation !== camera.generation) this.stop(true);
       this.camera = camera;
       this.element.querySelector('h3').textContent = camera.name || 'Unnamed camera';
-      this.img.alt = (camera.name || 'Camera') + ' synchronized annotated frame';
+      this.img.alt = (camera.name || 'Camera') + ' annotated camera frame';
       const source = this.element.querySelector('.camera-source');
       source.textContent = sourceLabel(camera.url_redacted);
       source.title = source.textContent;
@@ -146,12 +147,13 @@
       badge.className = 'camera-status badge ' + (state.toLowerCase() === 'running' ? 'good' : state.toLowerCase() === 'error' ? 'bad' : 'neutral');
       this.element.querySelector('.camera-fps').textContent = 'Analysis ' + numeric(camera.metrics?.fps, 1) + (camera.metrics?.fps != null ? ' FPS' : '');
       const tracks = list(camera.tracks);
-      this.element.querySelector('.camera-track-count').textContent = tracks.length + (tracks.length === 1 ? ' track' : ' tracks');
+      const counts = camera.face_counts;
+      this.element.querySelector('.camera-track-count').textContent = tracks.length + (tracks.length === 1 ? ' track' : ' tracks') + (counts ? ' / ' + counts.detected + ' faces / ' + counts.usable + ' usable' : '');
       const trackHtml = tracks.length ? tracks.map(trackMarkup).join('') : '<div class="inline-empty">No active tracks</div>';
       const trackList = this.element.querySelector('.track-list');
       if (trackList.innerHTML !== trackHtml) trackList.innerHTML = trackHtml;
       const evidence = this.element.querySelector('.camera-evidence');
-      evidence.querySelector('summary').textContent = 'Track evidence / ' + tracks.length + (tracks.length === 1 ? ' track' : ' tracks');
+      evidence.querySelector('summary').textContent = 'Track evidence / Best-quality crops / ' + tracks.length + (tracks.length === 1 ? ' track' : ' tracks');
       const evidenceKey = JSON.stringify(tracks.map((track) => [track.id ?? track.track_id, track.name, track.person_name, track.votes, track.observations, track.samples]));
       if (evidenceKey !== this.evidenceKey) {
         this.evidenceKey = evidenceKey;
@@ -173,6 +175,7 @@
         this.stop(!running(this.camera));
       }
       if (!running(this.camera)) this.placeholder.querySelector('span').textContent = this.camera.error ? 'Camera unavailable' : 'Camera stopped';
+      else if (!this.frameUrl) this.placeholder.querySelector('span').textContent = this.visible ? 'Loading camera preview...' : 'Preview loads when in view';
     }
 
     stop(clear = false) {
@@ -255,6 +258,7 @@
 
   function identity(track) {
     const state = String(track.identity_status ?? track.match_status ?? track.identity?.status ?? track.state ?? track.status ?? '').toLowerCase();
+    if (state === 'tracked') return {label: 'Head-tracked', className: 'tracked'};
     if (track.confirmed === true || track.identity_confirmed === true || state === 'confirmed') return {label: 'Confirmed', className: 'confirmed'};
     if (state === 'tentative' || track.person_name || track.identity?.name) return {label: 'Tentative', className: 'tentative'};
     return {label: 'Unconfirmed', className: 'neutral'};
@@ -272,15 +276,17 @@
   function trackMarkup(track) {
     const decision = identity(track);
     const name = track.person_name ?? track.identity?.name ?? track.name ?? 'Unknown person';
-    return '<div class="track-row"><div class="track-name">' + esc(name) + '<span class="badge ' + decision.className + '">' + decision.label + '</span><span class="track-id">Track ' + esc(track.id ?? track.track_id ?? '-') + '</span></div><span class="track-score">Score ' + numeric(track.score ?? track.match_score ?? track.similarity) + '</span><div class="track-admission">Registered-only admission: ' + admission(track) + '</div></div>';
+    const age = track.last_face_match_age_seconds;
+    const matchAge = age != null && track.identity_basis === 'head_track' ? '<div class="track-admission">Last face match ' + numeric(age, 1) + ' s ago; carried by head track</div>' : '';
+    return '<div class="track-row"><div class="track-name">' + esc(name) + '<span class="badge ' + decision.className + '">' + decision.label + '</span><span class="track-id">Track ' + esc(track.id ?? track.track_id ?? '-') + '</span></div><span class="track-score">Score ' + numeric(track.score ?? track.match_score ?? track.similarity) + '</span>' + matchAge + '<div class="track-admission">Registered-only admission: ' + admission(track) + '</div></div>';
   }
 
   function evidenceMarkup(tracks) {
     if (!tracks.length) return '<div class="inline-empty">No track evidence</div>';
     return tracks.map((track) => {
       const samples = list(track.samples).slice(0, 5);
-      const votes = track.votes == null ? 'Votes not reported' : track.votes + ' / ' + (track.observations ?? '-') + ' votes';
-      return '<section class="evidence-track"><div class="evidence-heading"><strong>' + esc(track.person_name ?? track.name ?? 'Track ' + (track.id ?? track.track_id ?? '-')) + '</strong><span>' + esc(votes) + '</span></div>' + (samples.length ? '<div class="sample-strip">' + samples.map((sample) => '<figure><button class="sample-open" data-action="sample-open" data-sample="' + esc(sample.id) + '" title="Inspect track sample" aria-label="Inspect track sample"><img data-src="' + esc(imageUrl(sample.url, '/api/samples/' + idPath(sample.id) + '/photo')) + '" alt="Ephemeral track evidence"></button><figcaption>Quality ' + numeric(sample.quality_score ?? sample.quality?.score) + '</figcaption></figure>').join('') + '</div>' : '<div class="inline-empty">No sample photos</div>') + '</section>';
+      const votes = track.votes == null ? 'Current votes not reported' : 'Current votes ' + track.votes + ' / ' + (track.observations ?? '-');
+      return '<section class="evidence-track"><div class="evidence-heading"><strong>' + esc(track.person_name ?? track.name ?? 'Track ' + (track.id ?? track.track_id ?? '-')) + '</strong><span>' + esc(votes) + '</span></div>' + (samples.length ? '<div class="sample-strip">' + samples.map((sample) => '<figure><button class="sample-open" data-action="sample-open" data-sample="' + esc(sample.id) + '" title="Inspect track sample" aria-label="Inspect track sample"><img data-src="' + esc(imageUrl(sample.url, '/api/samples/' + idPath(sample.id) + '/photo')) + '" alt="Best-quality track crop"></button><figcaption>Quality ' + numeric(sample.quality_score ?? sample.quality?.score) + '</figcaption></figure>').join('') + '</div>' : '<div class="inline-empty">No sample photos</div>') + '</section>';
     }).join('');
   }
 
@@ -348,7 +354,7 @@
     const engine = app.data?.engine || {};
     const providers = engine.providers;
     const providerNames = providers && typeof providers === 'object' ? [...new Set(Object.values(providers).flat().map((provider) => describe(provider)))] : providers ? [describe(providers)] : [];
-    $('provider-summary').textContent = providerNames.length ? providerNames.join(' / ') : 'Providers not reported';
+    $('provider-summary').textContent = (engine.face_model ? engine.face_model + ' / ' : '') + (providerNames.length ? providerNames.join(' / ') : 'Providers not reported');
     $('engine-ready').textContent = engine.ready === true ? 'Ready' : engine.ready === false ? 'Not ready' : 'Not reported';
     $('engine-ready').className = 'badge ' + (engine.ready === true ? 'good' : engine.ready === false ? 'warning' : 'neutral');
     readout('engine-details', engine);
@@ -390,6 +396,7 @@
       for (const button of section.querySelectorAll('button')) button.disabled = !app.connected || app.busy.has('person:' + id) || app.busy.has('photo:' + button.dataset.photo);
     }
     for (const button of $('candidate-list').querySelectorAll('button')) button.disabled = !app.connected || app.busy.has('candidate:' + button.dataset.id);
+    syncCandidateReview();
     icons($('camera-grid'));
   }
 
@@ -461,19 +468,144 @@
     $('candidate-empty').hidden = app.candidates.length > 0;
     if (key !== app.candidatesKey) {
       app.candidatesKey = key;
-      $('candidate-list').innerHTML = app.candidates.map((candidate) => '<article class="candidate"><img src="' + esc(imageUrl(candidate.url)) + '" alt="Candidate evaluation image" loading="lazy"><div><h4>' + esc(candidate.person_name || 'Unassigned candidate') + '</h4><p>Score ' + numeric(candidate.score) + '<br>' + esc(describe(candidate.reason)) + '</p><div class="actions"><button data-action="candidate-approve" data-id="' + esc(candidate.id) + '"><i data-lucide="check"></i>Approve</button><button data-action="candidate-reject" data-id="' + esc(candidate.id) + '"><i data-lucide="x"></i>Reject</button></div></div></article>').join('');
+      $('candidate-list').innerHTML = app.candidates.map((candidate) => '<article class="candidate"><img src="' + esc(imageUrl(candidate.url)) + '" alt="Candidate evaluation image" loading="lazy"><div><h4>' + esc(candidate.person_name || 'Unassigned candidate') + '</h4><p>' + esc(candidatePolicy(candidate)) + '<br>Quality ' + numeric(candidate.score, 1) + (candidate.evidence?.count != null ? '<br>' + esc(candidate.evidence.count) + ' crops / ' + numeric(candidate.evidence.span_seconds, 1) + ' s' : '') + (candidate.reason ? '<br>' + esc(describe(candidate.reason)) : '') + '</p>' + (candidate.policy === 'single_reference_review' ? '<p class="policy-warning">One reference: human approval required. Similarity is not proof of identity.</p>' : '') + '<div class="actions"><button data-action="candidate-approve" data-id="' + esc(candidate.id) + '"><i data-lucide="check"></i>Approve</button><button data-action="candidate-reject" data-id="' + esc(candidate.id) + '"><i data-lucide="x"></i>Reject</button></div></div></article>').join('');
       icons($('candidate-list'));
     }
     updateActions();
   }
 
-  const settingNames = ['match_threshold', 'match_margin', 'admission_threshold', 'admission_margin', 'adaptation_mode', 'analysis_fps', 'recognition_hz', 'face_min_width'];
+  function candidatePolicy(candidate) {
+    if (candidate.policy === 'single_reference_review') return 'One-reference review';
+    if (candidate.policy === 'registered_consensus') return 'Registered consensus';
+    return 'Manual review';
+  }
+
+  function candidateReference(candidate) {
+    if (candidate.anchor_reference_url || candidate.anchor_reference_id) return imageUrl(candidate.anchor_reference_url, '/api/photo/' + idPath(candidate.anchor_reference_id));
+    if (candidate.review_required || candidate.policy === 'single_reference_review') return '';
+    const person = list(app.data?.people).find((item) => candidate.person_id != null && String(item.id) === String(candidate.person_id));
+    const reference = list(person?.registered)[0];
+    return reference ? imageUrl(reference.url, '/api/photo/' + idPath(reference.id)) : '';
+  }
+
+  function syncCandidateReview() {
+    const current = app.candidates.find((candidate) => String(candidate.id) === String(candidateReview.candidate?.id));
+    const changed = !!candidateReview.candidate && (!current || JSON.stringify(current) !== candidateReview.key);
+    const unavailable = !candidateReview.candidate || changed || !app.connected || !candidateReview.referenceLoaded || !candidateReview.cropLoaded;
+    const checkbox = $('candidate-identity-verified');
+    if (unavailable) checkbox.checked = false;
+    checkbox.disabled = candidateReview.busy || unavailable;
+    $('candidate-review-confirm').disabled = candidateReview.busy || unavailable || !checkbox.checked;
+    $('candidate-review-form').setAttribute('aria-busy', String(candidateReview.busy));
+    for (const button of $('candidate-review-dialog').querySelectorAll('[data-close]')) button.disabled = candidateReview.busy;
+    if (changed && !candidateReview.busy) notice('candidate-review-error', 'This candidate changed or is no longer available. Close this review and refresh the candidates.');
+  }
+
+  function openCandidateReview(candidate) {
+    if ($('candidate-review-dialog').open || candidateReview.busy) return;
+    candidateReview.candidate = candidate;
+    candidateReview.key = JSON.stringify(candidate);
+    candidateReview.referenceLoaded = false;
+    candidateReview.cropLoaded = false;
+    $('candidate-review-form').reset();
+    const name = candidate.person_name || 'Unassigned candidate';
+    $('candidate-review-name').textContent = name;
+    $('candidate-review-policy').textContent = candidatePolicy(candidate);
+    $('candidate-review-warning').hidden = candidate.policy !== 'single_reference_review';
+    $('candidate-review-quality').textContent = 'Candidate quality ' + numeric(candidate.score, 1);
+    const evidence = candidate.evidence || {};
+    const values = [
+      ['Crops', evidence.count == null ? 'Not reported' : describe(evidence.count)],
+      ['Span', evidence.span_seconds == null ? 'Not reported' : numeric(evidence.span_seconds, 1) + ' s'],
+      ['Reference similarity', numeric(evidence.reference_similarity)],
+      ['Threshold', numeric(evidence.threshold)],
+      ['Margin', numeric(evidence.margin)],
+      ['Min. quality', numeric(evidence.min_quality, 0)],
+      ['Min. width', evidence.min_width == null ? 'Not reported' : numeric(evidence.min_width, 0) + ' px'],
+    ];
+    $('candidate-review-evidence').innerHTML = values.map(([label, value]) => '<div><dt>' + esc(label) + '</dt><dd>' + esc(value) + '</dd></div>').join('');
+    $('candidate-identity-label').textContent = 'I verified this is ' + name + ' and this photo may be added to their live references.';
+    notice('candidate-review-error', '');
+    for (const [kind, url] of [['reference', candidateReference(candidate)], ['crop', imageUrl(candidate.url)]]) {
+      const image = $('candidate-review-' + kind);
+      image.hidden = true;
+      image.removeAttribute('src');
+      image.alt = name + (kind === 'reference' ? ' / registered reference' : ' / candidate crop');
+      const status = $('candidate-review-' + kind + '-status');
+      status.hidden = false;
+      status.textContent = url ? 'Loading ' + (kind === 'reference' ? 'reference...' : 'candidate...') : 'Image unavailable. Approval is blocked.';
+      if (url) image.src = url;
+    }
+    syncCandidateReview();
+    $('candidate-review-dialog').showModal();
+  }
+
+  for (const kind of ['reference', 'crop']) {
+    const image = $('candidate-review-' + kind);
+    image.addEventListener('load', () => {
+      if (!candidateReview.candidate || !$('candidate-review-dialog').open) return;
+      candidateReview[kind + 'Loaded'] = true;
+      image.hidden = false;
+      $('candidate-review-' + kind + '-status').hidden = true;
+      syncCandidateReview();
+    });
+    image.addEventListener('error', () => {
+      candidateReview[kind + 'Loaded'] = false;
+      image.hidden = true;
+      const status = $('candidate-review-' + kind + '-status');
+      status.hidden = false;
+      status.textContent = 'Image unavailable. Approval is blocked.';
+      syncCandidateReview();
+    });
+  }
+  $('candidate-identity-verified').addEventListener('change', syncCandidateReview);
+  $('candidate-review-dialog').addEventListener('cancel', (event) => { if (candidateReview.busy) event.preventDefault(); });
+  $('candidate-review-dialog').addEventListener('close', () => {
+    candidateReview.candidate = null;
+    candidateReview.key = '';
+    candidateReview.referenceLoaded = false;
+    candidateReview.cropLoaded = false;
+    $('candidate-review-form').reset();
+    for (const kind of ['reference', 'crop']) $('candidate-review-' + kind).removeAttribute('src');
+    syncCandidateReview();
+  });
+  $('candidate-review-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    syncCandidateReview();
+    if ($('candidate-review-confirm').disabled || !$('candidate-review-form').reportValidity()) return;
+    const id = candidateReview.candidate.id;
+    const key = 'candidate:' + id;
+    if (app.busy.has(key)) return;
+    candidateReview.busy = true;
+    app.busy.add(key);
+    notice('candidate-review-error', '');
+    updateActions();
+    try {
+      const result = await api('/api/candidates/' + idPath(id) + '/approve', json('POST', {identity_verified: true}));
+      $('candidate-review-dialog').close();
+      if (result.accepted === true) toast('Candidate approved.');
+      else toast('Candidate not saved: ' + describe(result.reason || 'The reference was not accepted.'), true);
+      if (candidateFlight) await candidateFlight;
+      await refreshCandidates();
+      if (stateFlight) await stateFlight;
+      await refreshState();
+    } catch (error) {
+      $('candidate-identity-verified').checked = false;
+      notice('candidate-review-error', error.message || 'Approval failed.');
+    } finally {
+      candidateReview.busy = false;
+      app.busy.delete(key);
+      updateActions();
+    }
+  });
+
+  const settingNames = ['match_threshold', 'match_margin', 'admission_threshold', 'admission_margin', 'adaptation_mode', 'single_reference_mode', 'face_detection_mode', 'analysis_fps', 'recognition_hz', 'face_min_width', 'quality_strictness'];
   const dirtySettings = new Set();
   let savingSettings = false;
   const settingInput = (name) => $('settings-form').elements.namedItem(name);
+  const settingValue = (name) => app.data?.settings?.[name] ?? (name === 'single_reference_mode' ? 'off' : name === 'face_detection_mode' ? 'full_frame' : undefined);
 
   function syncSettings() {
-    const settings = app.data?.settings || {};
     const autoLocked = app.data?.metrics?.auto_admission_enabled === false;
     settingInput('adaptation_mode').querySelector('[value="auto"]').disabled = autoLocked;
     $('auto-lock-reason').hidden = !autoLocked;
@@ -481,26 +613,56 @@
     for (const id of ['settings-fields', 'admission-fields', 'capture-fields']) $(id).disabled = savingSettings || !app.connected;
     for (const name of settingNames) {
       const input = settingInput(name);
-      input.disabled = savingSettings || !app.connected || settings[name] == null;
-      if (!dirtySettings.has(name) && settings[name] != null) input.value = String(settings[name]);
+      const value = settingValue(name);
+      input.disabled = savingSettings || !app.connected || value == null;
+      if (!dirtySettings.has(name) && value != null) input.value = String(value);
     }
+    $('single-reference-warning').hidden = settingInput('single_reference_mode').value !== 'review';
+    $('quality-strictness').value = settingInput('quality_strictness').value;
+    $('quality-strictness').disabled = settingInput('quality_strictness').disabled;
+    $('quality-defaults').disabled = savingSettings || !app.connected || settingValue('quality_strictness') == null;
     $('save-settings').disabled = savingSettings || !app.connected || !dirtySettings.size;
     $('settings-status').textContent = savingSettings ? 'Saving...' : dirtySettings.size ? 'Unsaved changes' : app.data ? 'Current settings' : 'Waiting for settings';
   }
 
   $('settings-form').addEventListener('input', (event) => {
     if (!settingNames.includes(event.target.name)) return;
-    const original = app.data?.settings?.[event.target.name];
+    const original = settingValue(event.target.name);
     if (String(original) === event.target.value) dirtySettings.delete(event.target.name);
     else dirtySettings.add(event.target.name);
     syncSettings();
+  });
+
+  $('quality-strictness').addEventListener('input', (event) => {
+    const input = settingInput('quality_strictness');
+    input.value = event.target.value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  $('quality-defaults').addEventListener('click', async () => {
+    if (savingSettings || !app.connected) return;
+    savingSettings = true;
+    syncSettings();
+    notice('settings-error', '');
+    try {
+      await api('/api/settings', json('POST', { quality_strictness: 50, face_min_width: 70 }));
+      dirtySettings.delete('quality_strictness');
+      dirtySettings.delete('face_min_width');
+      if (stateFlight) await stateFlight;
+      await refreshState();
+      toast('Quality defaults restored.');
+    } catch (error) { notice('settings-error', error.message); }
+    finally { savingSettings = false; syncSettings(); }
   });
 
   $('settings-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     if (savingSettings || !dirtySettings.size || !$('settings-form').reportValidity()) return;
     const patch = {};
-    for (const name of dirtySettings) patch[name] = name === 'adaptation_mode' ? settingInput(name).value : Number(settingInput(name).value);
+    for (const name of dirtySettings) {
+      const input = settingInput(name);
+      patch[name] = input.tagName === 'SELECT' ? input.value : Number(input.value);
+    }
     if (patch.adaptation_mode === 'auto' && !(await confirmAction('Enable automatic adaptation?', 'Change the live photo adaptation mode to Auto for this evaluation?', 'Enable auto', false))) return;
     savingSettings = true;
     syncSettings();
@@ -581,7 +743,7 @@
       if (!sample) return;
       $('photo-title').textContent = (camera.name || 'Camera') + ' / track evidence';
       $('photo-large').src = imageUrl(sample.url, '/api/samples/' + idPath(sample.id) + '/photo');
-      $('photo-details').textContent = 'Ephemeral sample / quality ' + numeric(sample.quality_score ?? sample.quality?.score);
+      $('photo-details').textContent = 'Best-quality track crop / quality ' + numeric(sample.quality_score ?? sample.quality?.score);
       $('photo-dialog').showModal();
     } else if (button.dataset.action === 'camera-toggle') {
       const action = running(camera) ? 'stop' : 'start';
@@ -626,8 +788,11 @@
   $('candidate-list').addEventListener('click', async (event) => {
     const button = event.target.closest('[data-action]');
     if (!button || button.disabled) return;
-    const action = button.dataset.action === 'candidate-approve' ? 'approve' : 'reject';
-    const success = await mutate('candidate:' + button.dataset.id, '/api/candidates/' + idPath(button.dataset.id) + '/' + action, {method: 'POST'}, action === 'approve' ? 'Candidate approved.' : 'Candidate rejected.');
+    const candidate = app.candidates.find((item) => String(item.id) === button.dataset.id);
+    if (!candidate) return;
+    if (button.dataset.action === 'candidate-approve') { openCandidateReview(candidate); return; }
+    if (button.dataset.action !== 'candidate-reject') return;
+    const success = await mutate('candidate:' + button.dataset.id, '/api/candidates/' + idPath(button.dataset.id) + '/reject', {method: 'POST'}, 'Candidate rejected.');
     if (success) { if (candidateFlight) await candidateFlight; await refreshCandidates(); }
   });
 

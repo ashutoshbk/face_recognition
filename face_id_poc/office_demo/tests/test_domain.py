@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from domain import Gallery, TrackEvidence, registered_gate, safe_name, unit
+from domain import Gallery, TrackEvidence, HeadTrackIdentity, registered_gate, safe_name, unit
 
 
 class Index:
@@ -123,6 +123,102 @@ def test_conflict_breaks_admission():
         result = evidence.add(ranking(identity), 10+i*.6, i, SETTINGS)
     assert result["state"] == "Confirmed"
     assert not result["admission"]
+
+
+def confirmed_head_identity():
+    identity = HeadTrackIdentity()
+    for frame, timestamp in enumerate((10., 10.6, 11.2)):
+        result = identity.add(ranking(), timestamp, frame, SETTINGS)
+    assert result["state"] == "Confirmed"
+    return identity
+
+
+def test_confirmed_name_outlives_vote_window_on_continuous_head():
+    identity = confirmed_head_identity()
+    result = identity.summary(40)
+    assert result["name"] == "A" and result["state"] == "Tracked"
+    assert result["identity_basis"] == "head_track"
+    assert result["last_face_match_age_seconds"] == 28.8
+    assert not result["admission"]
+
+
+def test_unconfirmed_name_has_only_short_term_persistence():
+    identity = HeadTrackIdentity()
+    identity.add(ranking(), 10, 1, SETTINGS)
+    assert identity.summary(11)["state"] == "Tentative"
+    assert identity.summary(19)["name"] is None
+
+
+def test_same_face_revalidates_carried_name_without_new_admission():
+    identity = confirmed_head_identity()
+    result = identity.add(ranking(), 40, 10, SETTINGS)
+    assert result["name"] == "A" and result["state"] == "Confirmed"
+    assert result["identity_basis"] == "face" and result["observations"] == 1
+    assert not result["admission"]
+
+
+def test_new_identity_cannot_inherit_previous_confirmed_votes():
+    identity = confirmed_head_identity()
+    result = identity.add(ranking("B"), 11.8, 8, SETTINGS)
+    assert result["name"] == "B" and result["state"] == "Tentative"
+    assert result["votes"] == result["observations"] == 1
+    assert identity.confirmed is None
+
+
+def test_unknown_usable_face_revokes_carried_identity():
+    identity = confirmed_head_identity()
+    uncertain = ranking()
+    uncertain[0]["score"] = .2
+    result = identity.add(uncertain, 11.8, 8, SETTINGS)
+    assert result["name"] is None and identity.confirmed is None
+    assert identity.summary(12)["name"] is None
+
+
+def test_duplicate_observation_cannot_revoke_identity():
+    identity = confirmed_head_identity()
+    assert identity.add(ranking("B"), 11.8, 2, SETTINGS)["name"] == "A"
+
+
+def test_fresh_contradiction_revokes_before_vote_throttle():
+    identity = confirmed_head_identity()
+    result = identity.add(ranking("B"), 11.4, 8, SETTINGS)
+    assert result["name"] == "B" and result["state"] == "Tentative"
+    assert identity.confirmed is None and not result["admission"]
+
+
+def test_throttled_matching_face_does_not_add_vote_or_admit():
+    identity = confirmed_head_identity()
+    result = identity.add(ranking(), 11.4, 8, SETTINGS)
+    assert result["name"] == "A" and result["votes"] == 3
+    assert not result["admission"]
+
+
+def test_unconfirmed_conflict_breaks_strict_admission_even_when_throttled():
+    identity = HeadTrackIdentity()
+    identity.add(ranking(), 10., 1, SETTINGS)
+    identity.add(ranking(), 10.6, 2, SETTINGS)
+    identity.add(ranking("B"), 10.8, 3, SETTINGS)
+    result = identity.add(ranking(), 11.2, 4, SETTINGS)
+    assert result["state"] == "Confirmed" and not result["admission"]
+    identity.add(ranking(), 11.8, 5, SETTINGS)
+    assert identity.add(ranking(), 12.4, 6, SETTINGS)["admission"]
+
+
+def test_throttled_weak_reference_match_also_breaks_live_admission():
+    identity = HeadTrackIdentity()
+    identity.add(ranking(), 10., 1, SETTINGS)
+    identity.add(ranking(), 10.6, 2, SETTINGS)
+    weak = ranking()
+    weak[0].update(registered=[.5, .5], registered_score=.5, score=.5)
+    identity.add(weak, 10.8, 3, SETTINGS)
+    assert not identity.add(ranking(), 11.2, 4, SETTINGS)["admission"]
+
+
+def test_continuity_break_clears_both_votes_and_confirmed_name():
+    identity = confirmed_head_identity()
+    identity.clear()
+    assert identity.summary(12)["name"] is None
+    assert identity.summary(12)["observations"] == 0
 
 
 @pytest.mark.parametrize("name", ["../a", "a/b", "a\\b", ".", "", "a\x00b"])

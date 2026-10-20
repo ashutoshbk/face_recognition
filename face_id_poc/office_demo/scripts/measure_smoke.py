@@ -2,6 +2,7 @@
 """Capture a short local timing report without exporting identities or photos."""
 import argparse
 import json
+import os
 import statistics
 import time
 import urllib.request
@@ -15,6 +16,9 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--wait-ready", action="store_true", help="Wait up to 45 seconds for all configured cameras")
     args = parser.parse_args()
+    os.umask(0o077)
+    if args.seconds < 1:
+        parser.error("--seconds must be at least 1")
     if args.output.exists():
         parser.error("Choose a new output path")
     rows = []
@@ -53,7 +57,8 @@ def main():
             max_usable_faces=max(c["usable_faces"] for c in observations),
             max_confirmed=max(c["confirmed"] for c in observations))
     result = dict(seconds=args.seconds, warmup_seconds=round(warmup,2), timestamp=time.time(), summary=summary, rows=rows,
-        scope="Short replay smoke test. Three physical views plus explicitly labelled repeats; not identity accuracy or long-duration capacity.")
+        scope="Short smoke test of configured inputs; not identity accuracy or long-duration capacity. "
+              "Repeated clips must not be reported as distinct physical cameras.")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2)+"\n")
     args.output.chmod(0o600)

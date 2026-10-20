@@ -373,17 +373,21 @@ class TrackEvidence:
     def __init__(self):
         self.observations = deque(maxlen=5)
         self.last_observation = -1e9
+        self.window_seconds = 8.
 
     def clear(self):
         self.observations.clear()
         self.last_observation = -1e9
+        self.window_seconds = 8.
 
     def add(self, ranked, now, frame_id, settings):
+        # Allow five scheduled observations, including one interval of jitter.
+        self.window_seconds = max(8., self.observations.maxlen / settings.get("recognition_hz", 1.))
         if now - self.last_observation < .4:
             return self.summary(now)
         if any(x["frame_id"] == frame_id for x in self.observations):
             return self.summary(now)
-        while self.observations and now - self.observations[0]["time"] > 8:
+        while self.observations and now - self.observations[0]["time"] > self.window_seconds:
             self.observations.popleft()
         best = ranked[0] if ranked else None
         gap = best["score"] - ranked[1]["score"] if best and len(ranked) > 1 else 2.0
@@ -398,7 +402,7 @@ class TrackEvidence:
         return self.summary(now)
 
     def summary(self, now):
-        values = [x for x in self.observations if now - x["time"] <= 8]
+        values = [x for x in self.observations if now - x["time"] <= self.window_seconds]
         if not values:
             return dict(state="Unknown", name=None, person_id=None, votes=0, observations=0, admission=False)
         counts = Counter(x["person_id"] for x in values if x["person_id"])
@@ -422,3 +426,149 @@ class TrackEvidence:
             name=latest["name"] if supported else None, person_id=leader if supported else None,
             score=latest["score"], votes=votes, observations=len(values), admission=admission,
             admission_reason=latest["strict_reason"], admission_details=latest["strict_details"])
+
+
+class HeadTrackIdentity:
+    """Keep a confirmed identity on one continuous, unambiguous head track.
+
+    The short voting window and the track identity have different lifetimes.
+    Carry-forward is display evidence only, never a new vote or live admission.
+    The caller must clear this object on ambiguity, track expiry or reconnection.
+    """
+    def __init__(self):
+        self.evidence = TrackEvidence()
+        self.confirmed = None
+        self.last_match_time = None
+        self.examined_frames = deque(maxlen=32)
+        self.last_examined_time = -1e9
+        self.strict_barrier = -1e9
+
+    def clear(self):
+        self.evidence.clear()
+        self.confirmed = None
+        self.last_match_time = None
+        self.examined_frames.clear()
+        self.last_examined_time = -1e9
+        self.strict_barrier = -1e9
+
+    def add(self, ranked, now, frame_id, settings):
+        if frame_id in self.examined_frames or now < self.last_examined_time:
+            return self.summary(now, face_available=True)
+        best = ranked[0] if ranked else None
+        gap = best["score"]-ranked[1]["score"] if best and len(ranked) > 1 else 2.
+        candidate = best["person_id"] if best and best["score"] >= settings["match_threshold"] and gap >= settings["match_margin"] else None
+        # Vote-rate limiting must never delay revoking contradictory evidence.
+        if self.confirmed and candidate != self.confirmed["person_id"]:
+            self.clear()
+        strict = registered_gate(ranked, candidate, settings["admission_threshold"],
+                                 settings["admission_margin"])[0] if candidate else False
+        previous_person = self.evidence.observations[-1]["person_id"] if self.evidence.observations else None
+        if not strict or (previous_person is not None and previous_person != candidate):
+            # Even a frame omitted from downsampled votes breaks the consecutive
+            # registered-only evidence required to learn a new live reference.
+            self.strict_barrier = now
+        self.examined_frames.append(frame_id)
+        self.last_examined_time = now
+        if self.confirmed and candidate == self.confirmed["person_id"]:
+            self.last_match_time = now
+        previous = self.evidence.last_observation
+        result = self.evidence.add(ranked, now, frame_id, settings)
+        if previous == self.evidence.last_observation:
+            return self.summary(now, face_available=True)
+        latest = self.evidence.observations[-1]
+        if latest["person_id"]:
+            self.last_match_time = now
+        if result["state"] == "Confirmed":
+            self.confirmed = {k: result[k] for k in ("name", "person_id", "score", "votes", "observations")}
+        display = self.summary(now, face_available=True)
+        strict_recent = [x for x in self.evidence.observations if x["strict"] and
+                         x["person_id"] == result["person_id"] and x["time"] > self.strict_barrier]
+        admission = bool(result["admission"] and len(strict_recent) >= 3 and
+                         strict_recent[-1]["time"]-strict_recent[0]["time"] >= 1.)
+        # Only the just-processed face evidence can authorize an update.
+        display.update(admission=admission,
+                       admission_reason=result.get("admission_reason"),
+                       admission_details=result.get("admission_details", {}))
+        return display
+
+    def summary(self, now, face_available=False):
+        result = self.evidence.summary(now)
+        age = None if self.last_match_time is None else max(0., now-self.last_match_time)
+        if self.confirmed:
+            fresh = bool(face_available and age is not None and age <= 2 and
+                         result.get("person_id") == self.confirmed["person_id"])
+            values = result if result.get("person_id") == self.confirmed["person_id"] else self.confirmed
+            return dict(values, state="Confirmed" if fresh else "Tracked", admission=False,
+                        identity_basis="face" if fresh else "head_track",
+                        last_face_match_age_seconds=round(age, 1) if age is not None else None)
+        return dict(result, admission=False,
+                    identity_basis=("face" if face_available else "head_track") if result.get("name") else None,
+                    last_face_match_age_seconds=round(age, 1) if age is not None else None)
+
+
+def best_quality_crops(existing, candidate):
+    """Five distinct crops for the current identity; earlier crops win ties."""
+    pool = [item for item in existing if item.get("person_id") == candidate.get("person_id")]
+    if not any(item["digest"] == candidate["digest"] for item in pool):
+        pool.append(candidate)
+    return sorted(pool, key=lambda item: (-item["quality_score"], item["timestamp"], item["id"]))[:5]
+
+
+class SingleReferenceReview:
+    """A proposal gate, never authority to register a biometric reference."""
+    THRESHOLD = .60
+    MARGIN = .15
+    MIN_QUALITY = 65
+    MIN_WIDTH = 80
+    COUNT = 5
+    SPAN = 4.
+    MAX_INTERVAL = 5.  # The slowest supported recognition rate is 0.2 Hz.
+
+    def __init__(self):
+        self.clear()
+
+    def clear(self):
+        self.key = None
+        self.observations = deque(maxlen=self.COUNT)
+        self.interval = 1.
+
+    def observe(self, ranked, person_id, quality, now, frame_id, digest):
+        target = next((p for p in ranked if p["person_id"] == person_id), None)
+        rival = max((p["registered_score"] for p in ranked if p["person_id"] != person_id), default=-1.)
+        valid = (target is not None and len(target["registered"]) == 1 and
+                 target["registered_score"] >= self.THRESHOLD and
+                 target["registered_score"]-rival >= self.MARGIN and
+                 quality.get("accepted") and quality.get("score", 0) >= self.MIN_QUALITY and
+                 quality.get("width", 0) >= self.MIN_WIDTH)
+        if not valid:
+            self.clear()
+            return None
+        key = (person_id, target["anchor_version"], target["registered_revision"])
+        if self.key != key:
+            self.clear()
+            self.key = key
+        if any(item["frame"] == frame_id or item["digest"] == digest for item in self.observations):
+            return None
+        if self.observations:
+            interval = now-self.observations[-1]["time"]
+            if interval < 1.:
+                return None
+            if interval > max(3., self.interval+1.):
+                # Never bridge an unexpected gap with old votes. A bounded
+                # slow interval can seed the cadence of the new streak only.
+                self.clear()
+                self.key = key
+            if interval <= self.MAX_INTERVAL+1.:
+                self.interval = min(interval, self.MAX_INTERVAL)
+        self.observations.append(dict(time=now, frame=frame_id, digest=digest,
+            score=target["registered_score"], margin=target["registered_score"]-rival))
+        span = self.observations[-1]["time"]-self.observations[0]["time"]
+        if len(self.observations) < self.COUNT or span < self.SPAN:
+            return None
+        registered_refs = [r for r in target.get("reference_scores", []) if r["pool"] == "registered"]
+        return dict(count=self.COUNT, span_seconds=round(span, 2), threshold=self.THRESHOLD,
+            margin_threshold=self.MARGIN, min_quality=self.MIN_QUALITY, min_width=self.MIN_WIDTH,
+            reference_similarity=min(item["score"] for item in self.observations),
+            margin=min(item["margin"] for item in self.observations),
+            reference_id=registered_refs[0]["id"] if registered_refs else None,
+            note="One registered reference; explicit operator identity verification is required")

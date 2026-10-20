@@ -2,13 +2,14 @@
 
 ## Office GPU and Multi-Camera Update - 20 October 2026
 
-For the new single/bulk registration and configurable multi-camera evaluation,
-start with **[face_id_poc/office_demo/README.md](face_id_poc/office_demo/README.md)**.
-It covers the two five-photo collections, head tracking, progressive voting,
-Ubuntu GPU setup, RTSP configuration and the first-round validation results.
-The supplied model files are unchanged; no DigiFace download is required for
-this office entry point. Personal photos, videos and runtime databases are not
-part of this delivery.
+For normal **SCRFD-2.5G** office delivery, start with the
+**[Ubuntu/NVIDIA runbook](face_id_poc/office_demo/README.md)**: clean sparse clone,
+verified three-model setup, Docker/CUDA checks, single/bulk enrollment, five
+registered plus five approved live references, multiple RTSP cameras, safe
+defaults, and backup/troubleshooting. No research bootstrap, DigiFace download
+or 10G installation is required. This update adds no private photos, camera URLs,
+videos or runtime databases. Use the documented sparse checkout to avoid
+unrelated legacy assets elsewhere in the repository.
 
 The sections below describe the original standalone script. The earlier
 [research demo](face_id_poc/research_demo/README.md) and its instructions are

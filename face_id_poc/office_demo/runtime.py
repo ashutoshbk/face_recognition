@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 import subprocess
@@ -16,13 +17,14 @@ from urllib.parse import urlsplit
 import cv2
 import numpy as np
 
-from domain import TrackEvidence, write_json
-from vision_backend import Vision, HeadTracker, associate_faces, encode_jpeg
+from domain import HeadTrackIdentity, SingleReferenceReview, best_quality_crops, write_json
+from vision_backend import Vision, HeadTracker, associate_faces, encode_jpeg, assess_query_quality
 
 
 DEFAULTS = dict(match_threshold=.45, match_margin=.06, admission_threshold=.68,
                 admission_margin=.10, adaptation_mode="review", analysis_fps=10.,
-                recognition_hz=1., face_min_width=70)
+                recognition_hz=1., face_min_width=70, quality_strictness=50, single_reference_mode="off",
+                face_detection_mode="full_frame")
 
 
 @lru_cache(maxsize=1)
@@ -49,7 +51,8 @@ def redacted_url(url):
 
 
 def job_current(job, camera, track, epoch, now):
-    return bool(track and track.get("face_visible") and track.get("token") == job.get("track_token")
+    return bool(track and track.get("tracking_state", "observed") == "observed"
+        and track.get("token") == job.get("track_token")
         and camera.generation == job["generation"] and job["epoch"] == epoch
         and 0 <= now-job["captured"] <= 2)
 
@@ -72,6 +75,8 @@ class Camera:
         self.error = None
         self.tracker = None
         self.tracks = {}
+        self.track_cache = {}
+        self.face_observations = []
         self.preview = None
         self.inference_times = deque(maxlen=100)
         self.process_times = deque(maxlen=100)
@@ -82,6 +87,9 @@ class Camera:
         self.last_job = {}
         self.dimensions = None
         self.decoder = "not started"
+        self.counters = dict(face_detections=0, usable_face_detections=0, small_face_detections=0,
+            recognition_queries=0, named_decisions=0, confirmed_decisions=0, unknown_decisions=0,
+            stale_recognition_results=0)
 
     def start(self):
         if self.thread and self.thread.is_alive():
@@ -92,6 +100,8 @@ class Camera:
             self.inference_times.clear()
             self.capture_times.clear()
             self.total_processed = 0
+            for key in self.counters:
+                self.counters[key] = 0
         self.thread = threading.Thread(target=self._capture, daemon=True, name="capture-"+self.id)
         self.thread.start()
 
@@ -105,6 +115,8 @@ class Camera:
             self.generation += 1
             self.frame = self.preview = None
             self.tracks.clear()
+            self.track_cache.clear()
+            self.face_observations.clear()
             self.state = "stopped"
 
     def _publish_frame(self, frame, now):
@@ -141,6 +153,8 @@ class Camera:
                     self.generation += 1
                     self.tracker = HeadTracker(fps=10, threshold=.35, buffer_seconds=2, geometry_fallback=True)
                     self.tracks.clear()
+                    self.track_cache.clear()
+                    self.face_observations.clear()
                     self.dimensions = [width, height]
                     self.decoder = "FFmpeg NVDEC requested" if gpu_decode else "FFmpeg software decode"
                 size = width*height*3
@@ -165,6 +179,8 @@ class Camera:
                     self.error = "No fresh camera frames; check address, access and decoder compatibility"
                     self.frame = self.preview = None
                     self.tracks.clear()
+                    self.track_cache.clear()
+                    self.face_observations.clear()
                     self.generation += 1
             finally:
                 if self.process:
@@ -185,12 +201,17 @@ class Camera:
             fps = (len(times)-1)/(times[-1]-times[0]) if len(times) > 1 and times[-1] > times[0] else 0
             if self.state != "running" or not times or time.monotonic()-times[-1] > 2:
                 fps = 0
-            tracks = [{k: v for k, v in t.items() if k not in ("evidence", "last_seen", "token")} for t in self.tracks.values()]
+            tracks = [{k: v for k, v in t.items() if k not in ("evidence", "single_review", "last_seen", "token")} for t in self.tracks.values()]
             with self.capture_lock:
                 capture = [t for t in self.capture_times if time.monotonic()-t <= 5]
             capture_fps = (len(capture)-1)/(capture[-1]-capture[0]) if len(capture)>1 else 0
             return dict(id=self.id, name=self.name, url_redacted=redacted_url(self.url), state=self.state,
+                counters=dict(self.counters),
                 error=self.error, generation=self.generation, dimensions=self.dimensions, tracks=tracks,
+                face_counts=dict(detected=len(self.face_observations),
+                    usable=sum(f["usable"] for f in self.face_observations),
+                    small=sum(f["small"] for f in self.face_observations),
+                    unassigned=sum(not f["assigned"] for f in self.face_observations)),
                 decoder=self.decoder, metrics=dict(fps=round(fps, 2), capture_fps=round(capture_fps,2), processed_frames=self.total_processed,
                 frame_age_ms=round((time.monotonic()-self.frame_time)*1000) if self.frame_time else None,
                 inference_ms=round(sum(self.inference_times)/len(self.inference_times), 1) if self.inference_times else None))
@@ -287,16 +308,28 @@ class Manager:
             self.samples.clear()
         for camera in list(self.cameras.values()):
             with camera.lock:
-                for track in camera.tracks.values():
+                for track in camera.track_cache.values():
                     track["evidence"].clear()
-                    track.update(name=None, state="Unknown", votes=0, admission=False)
+                    if track.get("single_review"):
+                        track["single_review"].clear()
+                    track["samples"] = []
+                    track.update(name=None, person_id=None, state="Unknown", votes=0,
+                                 observations=0, admission=False, identity_basis=None,
+                                 last_face_match_age_seconds=None, token=uuid.uuid4().hex)
 
     def update_settings(self, changes):
         ranges = dict(match_threshold=(0, 1), match_margin=(0, .5), admission_threshold=(0, 1),
-            admission_margin=(0, .5), analysis_fps=(1, 30), recognition_hz=(.2, 5), face_min_width=(40, 300))
+            admission_margin=(0, .5), analysis_fps=(1, 30), recognition_hz=(.2, 5), face_min_width=(20, 300),
+            quality_strictness=(0, 100))
         proposed = dict(self.settings)
         for key, value in changes.items():
-            if key == "adaptation_mode":
+            if key == "face_detection_mode":
+                if value not in ("full_frame", "head_detail"):
+                    raise ValueError("Face detection mode must be full_frame or head_detail")
+            elif key == "single_reference_mode":
+                if value not in ("off", "review"):
+                    raise ValueError("Single-reference admission supports Off or manual Review only")
+            elif key == "adaptation_mode":
                 if value not in ("off", "review", "auto"):
                     raise ValueError("Invalid adaptation mode")
                 if value == "auto" and os.environ.get("CAMEX_OFFICE_ALLOW_AUTO_ADMISSION") != "1":
@@ -329,6 +362,8 @@ class Manager:
                     if now-captured > 2:
                         camera.state, camera.error = "stale", "Camera frames are stale"
                         camera.tracks.clear()
+                        camera.track_cache.clear()
+                        camera.face_observations.clear()
                         camera.preview = None
                         continue
                     if camera.processing or seq == camera.processed or now-camera.last_analysis < 1/self.settings["analysis_fps"]:
@@ -340,57 +375,112 @@ class Manager:
                 did_work = True
                 try:
                     tick = time.perf_counter()
-                    heads, faces = self.vision.detect(frame)
+                    heads, faces = self.vision.detect(frame, detail=self.settings["face_detection_mode"] == "head_detail")
                     tracks = tracker.update(heads, frame.shape, int(captured*1000))
                     associations, ambiguous = associate_faces(tracks, faces)
                     duration = (time.perf_counter()-tick)*1000
                     with camera.lock:
                         if generation != camera.generation or camera.state != "running" or time.monotonic()-captured > 2:
                             continue
-                        previous = camera.tracks
+                        ambiguous_ids = {str(k) for k in tracker.ambiguous_track_ids}
+                        assigned_faces = {fi for ti,fi in associations.items()
+                            if ti not in ambiguous and str(tracks[ti]["track_id"]) not in ambiguous_ids}
+                        camera.face_observations = []
+                        face_qualities = []
+                        for fi, face in enumerate(faces):
+                            quality, reference_quality = assess_query_quality(frame, face,
+                                int(self.settings["face_min_width"]), self.settings["quality_strictness"])
+                            face_qualities.append((quality, reference_quality))
+                            camera.face_observations.append(dict(
+                                bbox=[float(face[0]),float(face[1]),float(face[0]+face[2]),float(face[1]+face[3])],
+                                landmarks=face[4:14].reshape(5,2).tolist(), width=quality["width"],
+                                usable=quality["accepted"] and fi in assigned_faces,
+                                assigned=fi in assigned_faces, small=bool(face[2] < self.settings["face_min_width"]),
+                                reasons=quality["reasons"] or ([] if fi in assigned_faces else ["Unassigned"])))
+                        for key, old in list(camera.track_cache.items()):
+                            if now-old["last_seen"] > 2 or key in ambiguous_ids:
+                                self._release_samples(old.get("samples", []))
+                                del camera.track_cache[key]
+                        previous = camera.track_cache
                         current = {}
                         for track_index, item in enumerate(tracks):
                             key = str(item["track_id"])
                             old = previous.get(key, {})
                             t = dict(id=key, bbox=[float(x) for x in item["bbox"]],
-                                evidence=old.get("evidence", TrackEvidence()), last_seen=now,
+                                evidence=old.get("evidence", HeadTrackIdentity()), last_seen=now,
+                                single_review=old.get("single_review", SingleReferenceReview()),
                                 token=old.get("token", uuid.uuid4().hex),
                                 name=old.get("name"), state=old.get("state", "Unknown"),
                                 votes=old.get("votes", 0), observations=old.get("observations", 0),
                                 score=old.get("score"), admission=False, face_visible=False,
-                                samples=old.get("samples", []),
+                                samples=self._renew_samples(old.get("samples", []), now),
+                                sample_policy="best_quality", samples_seen=old.get("samples_seen", 0),
+                                tracking_state="observed", coast_age_seconds=0.,
                                 recognition_ms=old.get("recognition_ms"), search_ms=old.get("search_ms"))
                             t.update(t["evidence"].summary(now))
                             face_index = associations.get(track_index)
-                            if track_index in ambiguous or face_index is None:
+                            if track_index in ambiguous or key in ambiguous_ids:
                                 t["evidence"].clear()
-                                t.update(name=None, state="No usable face", token=uuid.uuid4().hex, votes=0, observations=0)
+                                t["single_review"].clear()
+                                self._release_samples(t["samples"])
+                                t["samples"] = []
+                                t.update(t["evidence"].summary(now))
+                                t.update(state="Association ambiguous", token=uuid.uuid4().hex)
+                            elif face_index is None:
+                                t.update(t["evidence"].summary(now))
+                                if not t["name"]:
+                                    t["state"] = "No usable face"
                             else:
                                 face = faces[face_index]
-                                quality, aligned, crop = self.vision.describe(frame, face, int(self.settings["face_min_width"]))
+                                _, aligned, crop = self.vision.describe(frame, face, int(self.settings["face_min_width"]))
+                                quality, reference_quality = face_qualities[face_index]
                                 t["quality"], t["face_visible"] = quality, quality["accepted"]
                                 if not quality["accepted"]:
-                                    t["evidence"].clear()
-                                    t.update(name=None, state="Quality rejected", token=uuid.uuid4().hex, votes=0, observations=0)
-                                elif now-camera.last_job.get(key, -1e9) >= 1/self.settings["recognition_hz"]:
+                                    t.update(t["evidence"].summary(now))
+                                    if not t["name"]:
+                                        t["state"] = "Quality rejected"
+                                else:
+                                    t.update(t["evidence"].summary(now, face_available=True))
+                                if quality["accepted"] and now-camera.last_job.get(key, -1e9) >= 1/self.settings["recognition_hz"]:
                                     job = dict(camera=camera, track_id=key, generation=generation, epoch=self.epoch,
                                         track_token=t["token"], sequence=seq, captured=captured,
-                                        aligned=aligned, crop=crop, quality=quality)
+                                        aligned=aligned, crop=crop, quality=quality, reference_quality=reference_quality)
                                     with self.pending_lock:
                                         self.pending[(camera.id, key)] = job
                                         while len(self.pending) > 128:
                                             self.pending.popitem(last=False)
                                     camera.last_job[key] = now
                             current[key] = t
+                        for key, old in list(previous.items()):
+                            gap = now-old["last_seen"]
+                            if key not in current and key not in ambiguous_ids and 0 <= gap <= .8:
+                                box = np.asarray(old["bbox"])
+                                competing = any(np.prod(np.maximum(0, np.minimum(box[2:], np.asarray(t["bbox"])[2:])-
+                                    np.maximum(box[:2], np.asarray(t["bbox"])[:2]))) > 0 for t in current.values())
+                                if competing:
+                                    self._release_samples(old.get("samples", []))
+                                    del camera.track_cache[key]
+                                    continue
+                                held = dict(old, tracking_state="coasting", coast_age_seconds=round(gap, 2),
+                                            face_visible=False, admission=False)
+                                held.update(held["evidence"].summary(now))
+                                held["samples"] = self._renew_samples(held.get("samples", []), now)
+                                current[key] = held
+                        camera.track_cache.update({k:t for k,t in current.items() if t["tracking_state"] == "observed"})
                         camera.tracks = current
                         camera.process_times.append(time.monotonic())
                         camera.total_processed += 1
+                        camera.counters["face_detections"] += len(camera.face_observations)
+                        camera.counters["usable_face_detections"] += sum(f["usable"] for f in camera.face_observations)
+                        camera.counters["small_face_detections"] += sum(f["small"] for f in camera.face_observations)
                         camera.inference_times.append(duration)
                         camera.preview = self._draw(camera, frame)
                 except Exception as error:
                     with camera.lock:
                         camera.error = "Analysis error: " + str(error)[:180]
                         camera.tracks.clear()
+                        camera.track_cache.clear()
+                        camera.face_observations.clear()
                         camera.preview = None
                 finally:
                     with camera.lock:
@@ -403,14 +493,18 @@ class Manager:
         ratio = width/frame.shape[1]
         view = cv2.resize(frame, (width, round(frame.shape[0]*ratio)))
         for track in camera.tracks.values():
+            if track.get("tracking_state") == "coasting":
+                continue
             x1, y1, x2, y2 = [int(v*ratio) for v in track["bbox"]]
-            confirmed = track["state"] == "Confirmed"
-            color = (80, 180, 40) if confirmed else (20, 180, 240)
+            confirmed = track["state"] in ("Confirmed", "Tracked")
+            color = (210, 150, 45) if track["state"] == "Tracked" else (80, 180, 40) if confirmed else (20, 180, 240)
             state_label = {"No usable face": "No face", "Quality rejected": "Low quality",
                            "Recognition unavailable": "Offline"}.get(track["state"], track["state"])
             label = track["name"] or state_label
             if track["name"] and not confirmed:
                 label = "? " + label
+            if track["name"] and track["state"] == "Tracked":
+                label += " [head track]"
             text = f'#{track["id"]} {label[:26]}'
             if track["observations"]:
                 text += f' {track["votes"]}/{track["observations"]}'
@@ -418,6 +512,26 @@ class Manager:
             text_width = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, .45, 1)[0][0]
             text_x = min(max(1, x1), max(1, width-text_width-3))
             cv2.putText(view, text, (text_x, max(18, y1-5)), cv2.FONT_HERSHEY_SIMPLEX, .45, color, 1, cv2.LINE_AA)
+        for face in camera.face_observations:
+            x1,y1,x2,y2 = [int(value*ratio) for value in face["bbox"]]
+            color = (230,200,0) if face["usable"] else (0,175,255)
+            for x in range(x1,x2+1,5):
+                cv2.circle(view,(x,y1),1,color,-1)
+                cv2.circle(view,(x,y2),1,color,-1)
+            for y in range(y1,y2+1,5):
+                cv2.circle(view,(x1,y),1,color,-1)
+                cv2.circle(view,(x2,y),1,color,-1)
+            for x,y in face["landmarks"]:
+                cv2.circle(view,(int(x*ratio),int(y*ratio)),1,color,-1)
+            text = f'face {round(face["width"])}px'
+            if not face["usable"]:
+                reasons = {"Face too small":"small", "Head angle":"angle", "Blur":"blur",
+                           "Lighting":"light", "Clipped face":"clipped", "Unassigned":"unassigned",
+                           "Low detection score":"weak"}
+                text += " / " + reasons.get(next(iter(face["reasons"]), ""), "check")
+            tx = max(0,min(x1,width-120))
+            ty = max(12,min(y2+12,view.shape[0]-3))
+            cv2.putText(view,text,(tx,ty),cv2.FONT_HERSHEY_SIMPLEX,.34,color,1,cv2.LINE_AA)
         return encode_jpeg(view)
 
     def _recognition_loop(self):
@@ -439,24 +553,44 @@ class Manager:
                 total_ms = (time.perf_counter()-tick)*1000
                 self.recognition_times.append(total_ms)
                 with camera.lock:
+                    camera.counters["recognition_queries"] += 1
                     track = camera.tracks.get(job["track_id"])
                     if not job_current(job, camera, track, self.epoch, time.monotonic()):
+                        camera.counters["stale_recognition_results"] += 1
                         continue
                     result = track["evidence"].add(ranked, job["captured"], job["sequence"], self.settings)
-                    track.update(result, recognition_ms=round(total_ms, 1), search_ms=round(search_ms, 2))
+                    camera.counters["named_decisions"] += int(result["name"] is not None)
+                    camera.counters["confirmed_decisions"] += int(result["state"] == "Confirmed")
+                    camera.counters["unknown_decisions"] += int(result["name"] is None)
+                    display = result if track["face_visible"] else track["evidence"].summary(time.monotonic())
+                    track.update(display, recognition_ms=round(total_ms, 1), search_ms=round(search_ms, 2))
                     identifier = uuid.uuid4().hex
+                    jpeg = encode_jpeg(job["crop"])
+                    digest = hashlib.sha256(jpeg).hexdigest()
+                    sample = dict(id=identifier, url=f"/api/samples/{identifier}/photo",
+                        quality_score=job["quality"]["score"], timestamp=job["captured"],
+                        digest=digest, person_id=result["person_id"], candidate=result["name"], state=result["state"])
+                    selected = best_quality_crops(track["samples"], sample)
+                    keep_ids = {item["id"] for item in selected}
                     with self.samples_lock:
-                        self.samples[identifier] = (time.monotonic()+10, encode_jpeg(job["crop"]))
+                        for old in track["samples"]:
+                            if old["id"] not in keep_ids:
+                                self.samples.pop(old["id"], None)
+                        if identifier in keep_ids:
+                            self.samples[identifier] = (time.monotonic()+10, jpeg)
                         for key in list(self.samples):
                             if self.samples[key][0] < time.monotonic():
                                 del self.samples[key]
                         while len(self.samples) > 250:
                             self.samples.popitem(last=False)
-                    track["samples"] = [s for s in track["samples"] if s["timestamp"] > time.monotonic()-8][-4:]
-                    track["samples"].append(dict(id=identifier, url=f"/api/samples/{identifier}/photo",
-                        quality_score=job["quality"]["score"], timestamp=job["captured"],
-                        candidate=result["name"], state=result["state"]))
-                if result["admission"] and self.settings["adaptation_mode"] != "off":
+                    track["samples"] = selected
+                    track["samples_seen"] += 1
+                    proposal = track["single_review"].observe(ranked, result["person_id"], job["reference_quality"],
+                        job["captured"], job["sequence"], digest) if self.settings["single_reference_mode"] == "review" else None
+                if proposal and result["state"] == "Confirmed" and self.settings["adaptation_mode"] != "off":
+                    anchor = next(p["anchor_version"] for p in ranked if p["person_id"] == result["person_id"])
+                    self._offer_reference(job, result, vector, anchor, ranked[0]["registered_revision"], proposal)
+                if result["admission"] and track["face_visible"] and self.settings["adaptation_mode"] != "off":
                     anchor = next((p["anchor_version"] for p in ranked if p["person_id"] == result["person_id"]), None)
                     revision = ranked[0]["registered_revision"] if ranked else None
                     self._offer_reference(job, result, vector, anchor, revision)
@@ -468,23 +602,48 @@ class Manager:
                         t.update(name=None, state="Recognition unavailable", token=uuid.uuid4().hex, votes=0, observations=0)
                 self.engine_error = str(error)[:180]
 
-    def _offer_reference(self, job, result, vector, anchor_version, registered_revision):
-        if job["epoch"] != self.epoch or anchor_version is None:
+    def _renew_samples(self, samples, now):
+        with self.samples_lock:
+            valid = []
+            for item in samples:
+                stored = self.samples.get(item["id"])
+                if stored and stored[0] >= now:
+                    self.samples[item["id"]] = (now+10, stored[1])
+                    valid.append(item)
+            return valid
+
+    def _release_samples(self, samples):
+        with self.samples_lock:
+            for item in samples:
+                self.samples.pop(item["id"], None)
+
+    def _offer_reference(self, job, result, vector, anchor_version, registered_revision, single_review=None):
+        quality = job["reference_quality"]
+        if job["epoch"] != self.epoch or anchor_version is None or not quality["accepted"]:
             return
         person_id = result["person_id"]
+        with self.candidate_lock:
+            if any(c["person_id"] == person_id and c["expires"] > time.monotonic() for c in self.candidates.values()):
+                return
         now = time.monotonic()
         if now-self.cooldowns.get(person_id, -1e9) < 10:
             return
         self.cooldowns[person_id] = now
         c = dict(id=uuid.uuid4().hex, person_id=person_id, person_name=result["name"],
-            score=job["quality"]["score"], quality=job["quality"], image=encode_jpeg(job["crop"]),
-            vector=vector, reason="Registered-only consensus passed; awaiting review",
+            score=quality["score"], quality=quality, image=encode_jpeg(job["crop"]),
+            vector=vector, reason="One-reference proposal; verify identity before saving" if single_review else "Registered-only consensus passed; awaiting review",
+            policy="single_reference_review" if single_review else "registered_consensus",
+            review_required=bool(single_review),
             epoch=job["epoch"], anchor_version=anchor_version, registered_revision=registered_revision,
-            expires=now+120, camera_id=job["camera"].id,
+            expires=now+600 if single_review else now+120, camera_id=job["camera"].id,
             camera_generation=job["generation"], track_id=job["track_id"],
-            evidence=result["admission_details"])
+            evidence=single_review or result["admission_details"])
+        refs = [r for r in self.gallery.references() if r["person_id"] == person_id and r["pool"] == "registered"]
+        if refs:
+            c["anchor_reference_id"] = refs[0]["id"]
+            c["anchor_reference_url"] = "/api/photo/"+refs[0]["id"]
         c["url"] = "/api/candidates/"+c["id"]+"/photo"
-        if self.settings["adaptation_mode"] == "auto":
+        if self.settings["adaptation_mode"] == "auto" and not single_review:
             self._admit(c)
         else:
             with self.candidate_lock:
@@ -492,11 +651,26 @@ class Manager:
                 while len(self.candidates) > 50:
                     self.candidates.popitem(last=False)
 
-    def _admit(self, candidate):
+    def _admit(self, candidate, identity_verified=False):
         with self.admission_lock:
-            return self._admit_locked(candidate)
+            return self._admit_locked(candidate, identity_verified)
 
-    def _admit_locked(self, candidate):
+    def decide_candidate(self, identifier, action, identity_verified=False):
+        if action not in ("approve", "reject"):
+            raise ValueError("Unknown action")
+        with self.admission_lock:
+            with self.candidate_lock:
+                candidate = self.candidates.get(identifier)
+                if candidate is None:
+                    raise ValueError("Candidate expired or already decided")
+            result = self._admit_locked(candidate, identity_verified) if action == "approve" else {"ok": True}
+            with self.candidate_lock:
+                self.candidates.pop(identifier, None)
+            return result
+
+    def _admit_locked(self, candidate, identity_verified=False):
+        if candidate.get("review_required") and identity_verified is not True:
+            raise ValueError("Explicit operator identity verification is required for a one-reference proposal")
         if candidate["epoch"] != self.epoch or time.monotonic() > candidate["expires"]:
             raise ValueError("Candidate is stale; collect fresh registered-only evidence")
         camera = self.cameras.get(candidate["camera_id"])
@@ -504,7 +678,8 @@ class Manager:
             raise ValueError("Candidate camera connection changed")
         return self.gallery.put(candidate["person_id"], "live", candidate["image"], candidate["vector"],
             candidate["quality"], dict(source="live", camera_id=candidate["camera_id"],
-                admission=candidate["evidence"], track_id=candidate["track_id"]),
+                admission=candidate["evidence"], track_id=candidate["track_id"],
+                policy=candidate.get("policy", "registered_consensus"), operator_verified=identity_verified),
                 expected_anchor_version=candidate["anchor_version"],
                 expected_registered_revision=candidate["registered_revision"])
 
@@ -544,6 +719,11 @@ class Manager:
                 except Exception:
                     pass
             self.gallery.cleanup_pending()
+            self.candidate_list()
+            with self.samples_lock:
+                for identifier, (expires, _) in list(self.samples.items()):
+                    if expires < time.monotonic():
+                        del self.samples[identifier]
             memory = psutil.virtual_memory()
             result = dict(cpu_percent=psutil.cpu_percent(), ram_used_gb=round(memory.used/1e9, 2),
                 ram_available_gb=round(memory.available/1e9, 2), process_rss_mb=round(process.memory_info().rss/1e6, 1),

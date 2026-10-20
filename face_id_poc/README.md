@@ -2,11 +2,13 @@
 
 ## Office Multi-Camera Update (20 October 2026)
 
-Use **[office_demo/README.md](office_demo/README.md)** for the new office
-evaluation: named-folder bulk or single registration, five registered plus five
-approved live references per person, configurable RTSP sources, progressive
-voting and verified Ubuntu/NVIDIA setup. It is an isolated entry point; the
-earlier 0.1.1 and research-demo instructions below remain available unchanged.
+Use the **[office Ubuntu/NVIDIA runbook](office_demo/README.md)** for normal
+**SCRFD-2.5G** delivery: clean sparse clone, three-model preparation, Docker/CUDA
+verification, single/bulk enrollment, five registered plus five approved live
+references, multiple RTSP cameras, quality/voting settings, and backup/recovery.
+No research bootstrap, DigiFace gallery or 10G installation is required. This is
+an isolated entry point; the earlier 0.1.1 and research-demo instructions below
+remain separate. Private assets and runtime data stay outside the repository.
 
 ## New Local Research Delivery (14 October 2026)
 

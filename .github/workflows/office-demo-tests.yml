@@ -1,0 +1,45 @@
+name: Office Face ID source tests
+on:
+  push:
+    branches: [codex/office-face-enrollment-multicam]
+    paths:
+      - 'face_id_poc/office_demo/**'
+      - 'face_id_poc/research_demo/vision/**'
+      - '.github/workflows/office-demo-tests.yml'
+  pull_request:
+    paths:
+      - 'face_id_poc/office_demo/**'
+      - 'face_id_poc/research_demo/vision/**'
+      - '.github/workflows/office-demo-tests.yml'
+permissions:
+  contents: read
+jobs:
+  source-tests:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: face_id_poc
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: face_id_poc
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned CPU test dependencies
+        run: |
+          python -m pip install pip==24.3.1 setuptools==75.6.0 wheel==0.45.1 Cython==3.0.11 numpy==1.26.4
+          python -m pip install --no-build-isolation -r office_demo/requirements-cpu.txt pytest==8.3.5
+          python -m pip check
+      - run: python -m pytest office_demo/tests -q --junitxml=office-tests.xml
+      - run: node --check office_demo/static/app.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: office-source-tests
+          path: face_id_poc/office-tests.xml
+# No staff data, camera credentials or model downloads in CI. Actual GPU/model
+# execution and private RTSP integration are validated separately before release.

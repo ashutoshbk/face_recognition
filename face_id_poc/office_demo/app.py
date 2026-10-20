@@ -241,16 +241,12 @@ def candidate_photo(identifier: str):
 
 
 @app.post("/api/candidates/{identifier}/{action}")
-def candidate_action(identifier: str, action: str):
-    with manager.candidate_lock:
-        c = manager.candidates.pop(identifier, None)
-    if not c:
-        raise ValueError("Candidate expired")
-    if action == "approve":
-        return manager._admit(c)
-    if action != "reject":
+async def candidate_action(identifier: str, action: str, request: Request):
+    if action not in ("approve", "reject"):
         raise ValueError("Unknown action")
-    return {"ok": True}
+    data = await request.json() if await request.body() else {}
+    return await run_in_threadpool(manager.decide_candidate, identifier, action,
+                                  isinstance(data, dict) and data.get("identity_verified") is True)
 
 
 @app.get("/api/report")

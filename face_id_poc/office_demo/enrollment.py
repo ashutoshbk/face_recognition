@@ -53,7 +53,7 @@ class Enrollment:
                     if len(faces) != 1:
                         raise ValueError("Enrollment image must contain exactly one clearly visible face")
                     quality, aligned, crop = self.manager.vision.describe(frame, faces[0],
-                        int(self.manager.settings["face_min_width"]))
+                        max(70, int(self.manager.settings["face_min_width"])))
                     item["quality"] = quality
                     if not quality["accepted"]:
                         raise ValueError("; ".join(quality["reasons"]))

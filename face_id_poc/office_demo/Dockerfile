@@ -36,6 +36,7 @@ WORKDIR /app/office_demo
 COPY research_demo/vision /app/research_demo/vision
 COPY research_demo/core.py /app/research_demo/core.py
 COPY office_demo/*.py ./
+COPY office_demo/models_manifest.json ./models_manifest.json
 COPY office_demo/static ./static
 COPY office_demo/scripts ./scripts
 RUN groupadd --gid 10001 office && useradd --uid 10001 --gid office --no-create-home office \

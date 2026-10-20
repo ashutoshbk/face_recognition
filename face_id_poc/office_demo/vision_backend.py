@@ -21,6 +21,44 @@ from vision.head_tracker import HeadTracker
 from vision.association import associate_faces
 from core import assess_quality
 
+FACE_MODELS = {
+    "scrfd_2.5g": ("scrfd-kps-2.5g-640x640.onnx", MODEL_HASHES["scrfd-kps-2.5g-640x640.onnx"]),
+    "scrfd_10g": ("det_10g.onnx", "5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91"),
+}
+
+
+def face_model_spec(name):
+    if name not in FACE_MODELS:
+        raise ValueError("Unsupported face detector: " + str(name))
+    return FACE_MODELS[name]
+
+
+def assess_query_quality(frame, face, minimum_width=70, strictness=50):
+    """Tune query eligibility without weakening reference-photo admission."""
+    reference = assess_quality(frame, face, minimum_width=max(70, minimum_width))
+    query = dict(reference, reasons=list(reference["reasons"]))
+    if "Outside frame" in query["reasons"]:
+        return query, reference
+    level = float(strictness) / 100
+    eye1, eye2, nose = face[4:6], face[6:8], face[8:10]
+    eye_distance = max(float(np.linalg.norm(eye1-eye2)), 1.)
+    yaw = abs(float(nose[0]-(eye1[0]+eye2[0])/2)) / eye_distance
+    roll = abs(float(eye1[1]-eye2[1])) / eye_distance
+    reasons = [r for r in query["reasons"] if r not in ("Face too small", "Blur", "Lighting", "Head angle")]
+    if face[2] < minimum_width:
+        reasons.append("Face too small")
+    if query["sharpness"] < 10 + 70*level:
+        reasons.append("Blur")
+    if query["brightness"] < 20 + 40*level or query["brightness"] > 240 - 40*level:
+        reasons.append("Lighting")
+    if yaw > .6 - .4*level or roll > .5 - .3*level:
+        reasons.append("Head angle")
+    # Preserve the exact existing result at the default, including boundary rounding.
+    if strictness == 50 and minimum_width >= 70:
+        return dict(reference, reasons=list(reference["reasons"])), reference
+    query.update(accepted=not reasons, reasons=reasons)
+    return query, reference
+
 
 def decode_upload(data):
     if not data or len(data) > 12_000_000:
@@ -47,6 +85,34 @@ def face_crop(frame, face):
                  max(0, int(x-pad)):min(frame.shape[1], int(x+w+pad))].copy()
 
 
+def head_detail_regions(heads, faces, shape, cursor=0, limit=4):
+    """Bounded native-pixel crops; never alter the reported native face size."""
+    height, width = shape[:2]
+    candidates = []
+    for head in heads:
+        x1, y1, x2, y2 = map(float, head[:4])
+        if x2 <= x1 or y2 <= y1:
+            continue
+        padding = .15*np.array([x2-x1, y2-y1])
+        # A high-confidence sufficiently large full-frame face needs no extra pass.
+        adequate = any(x1-padding[0] <= f[0]+f[2]/2 <= x2+padding[0] and
+                       y1-padding[1] <= f[1]+f[3]/2 <= y2+padding[1] and
+                       f[2] >= 70 and f[-1] >= .85 for f in faces)
+        if adequate:
+            continue
+        side = min(640, max(128, int(max(x2-x1, y2-y1)*2.2)))
+        cx, cy = (x1+x2)/2, (y1+y2)/2
+        left, top = max(0, int(cx-side/2)), max(0, int(cy-side/2))
+        right, bottom = min(width, int(cx+side/2)), min(height, int(cy+side/2))
+        region = (left, top, right, bottom)
+        if min(right-left, bottom-top) >= 32 and region not in candidates:
+            candidates.append(region)
+    if not candidates:
+        return []
+    start = cursor % len(candidates)
+    return (candidates[start:] + candidates[:start])[:limit]
+
+
 class Vision:
     def __init__(self, model_dir, provider, profile_dir):
         import onnxruntime as ort
@@ -58,10 +124,15 @@ class Vision:
         self.local = threading.local()
         self.encode_lock = threading.Lock()
         self.sessions = {}
+        self.face_model = os.environ.get("CAMEX_OFFICE_FACE_MODEL", "scrfd_2.5g")
+        face_filename, face_hash = face_model_spec(self.face_model)
         self.profiling = os.environ.get("CAMEX_OFFICE_PROFILE", "0") == "1"
         profile_dir = Path(profile_dir)
         profile_dir.mkdir(parents=True, exist_ok=True)
-        for name, expected in MODEL_HASHES.items():
+        hashes = dict(MODEL_HASHES)
+        hashes.pop("scrfd-kps-2.5g-640x640.onnx")
+        hashes[face_filename] = face_hash
+        for name, expected in hashes.items():
             path = Path(model_dir) / name
             if not path.exists() or sha256(path) != expected:
                 raise RuntimeError("Missing or incompatible model: " + name)
@@ -77,7 +148,7 @@ class Vision:
                 raise RuntimeError("Requested provider initialization failed: " + name)
             self.sessions[name] = session
         self.head = self.sessions["yolox-tiny-crowdhuman-416x416.onnx"]
-        self.face_session = self.sessions["scrfd-kps-2.5g-640x640.onnx"]
+        self.face_session = self.sessions[face_filename]
         self.face = SCRFD(session=self.face_session)
         self.face.det_thresh = .7
         self.face.nms_thresh = .4
@@ -89,10 +160,10 @@ class Vision:
             strides.append(np.full((len(grids[-1]), 1), stride))
         self.grid = np.concatenate(grids).astype(np.float32)
         self.strides = np.concatenate(strides).astype(np.float32)
-        self.calls = {"head": 0, "face": 0, "recognition": 0}
+        self.calls = {"head": 0, "face": 0, "face_detail": 0, "recognition": 0}
         self.saved_profile = None
 
-    def detect(self, frame, enrollment=False):
+    def detect(self, frame, enrollment=False, detail=False):
         with self.detect_lock:
             detector = getattr(self.local, "face", None)
             if detector is None:
@@ -121,17 +192,28 @@ class Vision:
             # for every head; returned landmarks still map to native pixels.
             rois = [(0, 0, w, h)]
             faces = []
-            for x1, y1, x2, y2 in rois:
+            def run_roi(region, is_detail=False):
+                x1, y1, x2, y2 = region
                 if min(x2-x1, y2-y1) < 12:
-                    continue
-                detected, landmarks = detector.detect(frame[y1:y2, x1:x2])
+                    return
+                detected, landmarks = detector.detect(frame[y1:y2, x1:x2], input_size=(640, 640))
                 self.calls["face"] += 1
+                self.calls["face_detail"] += int(is_detail)
                 if landmarks is None:
-                    continue
+                    return
                 for box, points in zip(detected, landmarks):
+                    if is_detail and (box[0] < 2 or box[1] < 2 or box[2] > x2-x1-2 or box[3] > y2-y1-2):
+                        continue
                     xy = box[:4] + np.array([x1, y1, x1, y1])
                     points = points + np.array([x1, y1])
                     faces.append(np.r_[xy[:2], xy[2:]-xy[:2], points.reshape(-1), box[4]].astype(np.float32))
+            run_roi(rois[0])
+            if detail and not enrollment:
+                cursor = getattr(self.local, "detail_cursor", 0)
+                regions = head_detail_regions(heads, faces, frame.shape, cursor=cursor, limit=1)
+                self.local.detail_cursor = cursor+len(regions)
+                for region in regions:
+                    run_roi(region, is_detail=True)
             if len(faces) > 1:
                 f = np.stack(faces)
                 keep = nms(np.c_[f[:, :2], f[:, :2]+f[:, 2:4]], f[:, -1], .35)
@@ -171,5 +253,6 @@ class Vision:
 
     def status(self):
         return {"ready": True, "requested_provider": self.provider,
+                "face_model": self.face_model, "face_input": [640, 640],
                 "providers": {name: s.get_providers() for name, s in self.sessions.items()},
                 "profiling": self.profiling, "calls": dict(self.calls)}

@@ -24,6 +24,7 @@
     <div id="connection-error" class="notice error" role="status" hidden></div>
     <section id="view-cameras" role="tabpanel" aria-labelledby="tab-cameras">
       <div class="section-heading"><div><h2>Cameras</h2><p id="camera-summary" class="muted">Loading camera state...</p></div><div class="actions"><button id="start-all" disabled><i data-lucide="play" aria-hidden="true"></i>Start all</button><button id="stop-all" disabled><i data-lucide="square" aria-hidden="true"></i>Stop all</button><button id="add-camera" class="primary"><i data-lucide="plus" aria-hidden="true"></i>Add camera</button></div></div>
+      <div class="overlay-legend"><span><i class="head-swatch"></i>Head track</span><span><i class="face-swatch usable"></i>Usable face</span><span><i class="face-swatch rejected"></i>Detected face, quality check failed</span></div>
       <div id="camera-grid" class="camera-grid" aria-label="Camera feeds"></div>
       <div id="camera-empty" class="empty-state"><i data-lucide="loader-circle" aria-hidden="true"></i><h3>Loading cameras</h3></div>
     </section>
@@ -45,8 +46,14 @@
             <fieldset id="capture-fields" disabled><legend>Capture &amp; adaptation</legend>
               <label>Adaptation mode<select name="adaptation_mode"><option value="off">Off</option><option value="review">Review</option><option value="auto">Auto</option></select></label>
               <p id="auto-lock-reason" class="muted" hidden></p>
+              <label>Single-reference mode<select name="single_reference_mode"><option value="off" selected>Off</option><option value="review">One-photo reviewed bootstrap</option></select></label>
+              <p id="single-reference-warning" class="policy-warning" hidden>One reference: human approval required. Similarity is not proof of identity.</p>
               <div class="field-pair"><label>Analysis FPS<input name="analysis_fps" type="number" min="1" max="30" step="0.1" required></label><label>Recognition Hz<input name="recognition_hz" type="number" min="0.2" max="5" step="0.1" required></label></div>
-              <label>Minimum face width (px)<input name="face_min_width" type="number" min="40" max="300" step="1" required></label>
+              <label>Minimum face width (px)<input name="face_min_width" type="number" min="20" max="300" step="1" required></label>
+              <label for="quality-strictness">Recognition quality strictness</label>
+              <div class="field-pair"><input id="quality-strictness" type="range" min="0" max="100" step="1" aria-label="Recognition quality strictness"><input name="quality_strictness" type="number" min="0" max="100" step="1" aria-label="Quality strictness value" required></div>
+              <div class="form-footer"><span class="muted">Relaxed 0 / Default 50 / Strict 100</span><button id="quality-defaults" type="button" title="Restore quality strictness 50 and minimum face width 70 px"><i data-lucide="rotate-ccw" aria-hidden="true"></i>Quality defaults</button></div>
+              <label>Face detection<select name="face_detection_mode"><option value="full_frame">Full frame</option><option value="head_detail">Full frame + head detail</option></select></label>
             </fieldset>
             <div id="settings-error" class="notice error" role="alert" hidden></div>
             <div class="form-footer"><span id="settings-status" class="muted" role="status">Waiting for settings</span><button id="save-settings" class="primary" disabled><i data-lucide="check" aria-hidden="true"></i>Save settings</button></div>
@@ -98,6 +105,25 @@
     <div class="dialog-header"><h2 id="webcam-title">Capture photos</h2><button class="icon-button" data-close="webcam-dialog" title="Close camera" aria-label="Close camera"><i data-lucide="x" aria-hidden="true"></i></button></div>
     <div class="dialog-body"><div class="webcam-view"><video id="webcam-video" autoplay muted playsinline></video><span id="webcam-placeholder">Camera stopped</span></div><div class="capture-actions"><button id="webcam-start"><i data-lucide="video" aria-hidden="true"></i>Start camera</button><button id="webcam-snap" disabled><i data-lucide="camera" aria-hidden="true"></i>Take photo</button><span id="webcam-count" class="muted">0 / 5 photos</span></div><div id="webcam-error" class="notice error" role="alert" hidden></div><div id="webcam-photos" class="webcam-photos"></div></div>
     <div class="dialog-footer"><button data-close="webcam-dialog">Cancel</button><button id="webcam-use" class="primary" disabled><i data-lucide="check" aria-hidden="true"></i>Use photos</button></div>
+  </dialog>
+
+  <dialog id="candidate-review-dialog" class="candidate-review-dialog" aria-labelledby="candidate-review-title">
+    <form id="candidate-review-form">
+      <div class="dialog-header"><h2 id="candidate-review-title">Review candidate</h2><button type="button" class="icon-button" data-close="candidate-review-dialog" title="Close review" aria-label="Close review"><i data-lucide="x" aria-hidden="true"></i></button></div>
+      <div class="dialog-body">
+        <div class="review-heading"><h3 id="candidate-review-name"></h3><span id="candidate-review-policy" class="muted"></span></div>
+        <p id="candidate-review-warning" class="policy-warning" hidden>One reference: human approval required. Similarity is not proof of identity.</p>
+        <div class="review-photos">
+          <figure><figcaption>Registered reference</figcaption><div class="review-photo-visual"><img id="candidate-review-reference" alt="Registered reference" hidden><span id="candidate-review-reference-status" role="status">Loading reference...</span></div></figure>
+          <figure><figcaption>Candidate crop</figcaption><div class="review-photo-visual"><img id="candidate-review-crop" alt="Candidate crop" hidden><span id="candidate-review-crop-status" role="status">Loading candidate...</span></div></figure>
+        </div>
+        <p id="candidate-review-quality" class="review-quality"></p>
+        <dl id="candidate-review-evidence" class="review-evidence"></dl>
+        <label class="checkbox"><input id="candidate-identity-verified" type="checkbox" required disabled><span id="candidate-identity-label"></span></label>
+        <div id="candidate-review-error" class="notice error" role="alert" hidden></div>
+      </div>
+      <div class="dialog-footer"><button type="button" data-close="candidate-review-dialog" autofocus>Cancel</button><button id="candidate-review-confirm" type="submit" class="primary" disabled><i data-lucide="check" aria-hidden="true"></i>Confirm approval</button></div>
+    </form>
   </dialog>
 
   <dialog id="confirm-dialog" class="small-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message"><form method="dialog"><div class="dialog-header"><h2 id="confirm-title">Confirm deletion</h2></div><div class="dialog-body"><p id="confirm-message"></p></div><div class="dialog-footer"><button value="cancel" autofocus>Cancel</button><button id="confirm-action" value="confirm" class="danger-button">Delete</button></div></form></dialog>
