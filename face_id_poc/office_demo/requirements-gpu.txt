@@ -1,0 +1,4 @@
+-r requirements-common.txt
+# Official ORT CUDA 12 / cuDNN 8 wheel, CPython 3.10, Linux x86_64.
+# PyPI's onnxruntime-gpu==1.18.0 is CUDA 11.8, NOT this build.
+onnxruntime-gpu @ https://aiinfra.pkgs.visualstudio.com/2692857e-05ef-43b4-ba9c-ccf1c22c437c/_packaging/9387c3aa-d9ad-4513-968c-383f6f7f53b8/pypi/download/onnxruntime-gpu/1.18/onnxruntime_gpu-1.18.0-cp310-cp310-manylinux_2_28_x86_64.whl#sha256=039be9a6b7f71c6739e97eec79f4bf240793a7c0c4108a09e0e1a27b4c33dbca

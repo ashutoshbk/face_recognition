@@ -1,0 +1,10 @@
+.runtime-office/
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc
+*.onnx
+*.engine
+*.mp4
+*.sqlite3*
+*.env

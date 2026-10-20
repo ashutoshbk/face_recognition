@@ -1,5 +1,13 @@
 # CAMEX Face ID and Head Tracking
 
+## Office Multi-Camera Update (20 October 2026)
+
+Use **[office_demo/README.md](office_demo/README.md)** for the new office
+evaluation: named-folder bulk or single registration, five registered plus five
+approved live references per person, configurable RTSP sources, progressive
+voting and verified Ubuntu/NVIDIA setup. It is an isolated entry point; the
+earlier 0.1.1 and research-demo instructions below remain available unchanged.
+
 ## New Local Research Delivery (14 October 2026)
 
 The separate [Mac/Ubuntu reproduction guide](research_demo/README.md) covers

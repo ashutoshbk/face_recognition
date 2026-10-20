@@ -1,5 +1,19 @@
 # Office Face Recognition (InsightFace)
 
+## Office GPU and Multi-Camera Update - 20 October 2026
+
+For the new single/bulk registration and configurable multi-camera evaluation,
+start with **[face_id_poc/office_demo/README.md](face_id_poc/office_demo/README.md)**.
+It covers the two five-photo collections, head tracking, progressive voting,
+Ubuntu GPU setup, RTSP configuration and the first-round validation results.
+The supplied model files are unchanged; no DigiFace download is required for
+this office entry point. Personal photos, videos and runtime databases are not
+part of this delivery.
+
+The sections below describe the original standalone script. The earlier
+[research demo](face_id_poc/research_demo/README.md) and its instructions are
+retained separately; do not mix the three installation paths.
+
 A simple Python script that recognizes known people in a video by comparing detected faces
 against a folder of reference (staff) photos, using InsightFace face embeddings.
 
