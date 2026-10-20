@@ -110,39 +110,13 @@ continuity and single-person capture, followed by longer testing and real labell
 acceptance on the team's five Hikvision cameras. Model licensing, liveness,
 authentication and production deployment acceptance are separate requirements.
 
-## Reproduce on the Prepared Local Server
+## Reproduction
 
-The prepared directory is `/home/fovea/camex-office-eval-20261020` on
-`fovea@192.168.0.26`. Code is under `source/office_demo`; the private runtime,
-models, inputs and reports are outside the source checkout.
+This is historical first-round evidence, not the current installation guide.
+Follow the [Ubuntu/NVIDIA runbook](README.md) for a clean installation using your
+own private paths, authorized references and RTSP cameras. Operator-specific
+host addresses and prepared datasets are not prerequisites and are intentionally
+omitted from this handoff.
 
-```bash
-cd /home/fovea/camex-office-eval-20261020/source
-export OFFICE_RUNTIME_DIR=/home/fovea/camex-office-eval-20261020/runtime
-export OFFICE_MODELS_DIR=/home/fovea/camex-office-eval-20261020/models
-export OFFICE_FIXTURE_DIR=/home/fovea/camex-office-eval-20261020/fixtures/one-minute-lowdelay
-export OFFICE_HWDECODE=1
-bash office_demo/scripts/office_stack.sh up
-bash office_demo/scripts/office_stack.sh fixture-up
-```
-
-Open the local dashboard and use Start all; the five source configurations and
-20 reference profiles are already present. Do not re-import fixture cameras into
-the prepared runtime. For a new installation follow the main README.
-
-When a Mac-to-server tunnel is not already running:
-
-```bash
-ssh -N -L 9170:127.0.0.1:9170 fovea@192.168.0.26
-```
-
-Then open `http://127.0.0.1:9170/` on that Mac. The service is not published to
-the internet. Record a fresh short run with a new output filename:
-
-```bash
-python3 office_demo/scripts/measure_smoke.py --wait-ready --seconds 60 \
-  --output "$OFFICE_RUNTIME_DIR/reports/my-new-smoke.json"
-```
-
-Stop sources with the dashboard's Stop all button. To stop only this application
-stack while retaining its data, run `bash office_demo/scripts/office_stack.sh down`.
+See [the latest validation](VALIDATION_20261020.md) for the subsequent
+SCRFD-2.5G synchronized replay check and the exact limits of the results.
