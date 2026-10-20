@@ -820,8 +820,9 @@ This stops publishing, not app camera records; use Stop in the UI too.
 
 ## 12. Fresh Ubuntu Release Check
 
-This is a **planned verification recipe**, not a claim that the new release has
-passed. On the fresh Ubuntu host, complete Sections 1-4, then use a separate
+This is the reproduction recipe; see the dated
+[delivery validation](VALIDATION_20261020.md) for checks actually completed.
+On the fresh Ubuntu host, complete Sections 1-4, then use a separate
 project, image, runtime and app port. Do not repoint an existing production or
 research runtime:
 
@@ -1082,6 +1083,9 @@ first-round run and its limitations. Its prepared-machine paths are historical
 evidence, not installation requirements. Five published fixture connections
 include two repeated recordings; they do not establish performance on five
 independent cameras.
+
+[VALIDATION_20261020.md](VALIDATION_20261020.md) records this delivery's
+clean-runtime, pinned-dependency and SCRFD-2.5G checks separately.
 
 Short replay tests, stored-vector self-matches, synthetic unit tests and CUDA
 kernel checks establish different things. None proves liveness, site-specific
