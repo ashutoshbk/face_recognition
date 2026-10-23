@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from domain import Gallery, unit
+from runtime import DEFAULTS, SETTINGS_PROFILE, Manager
 
 
 class Index:
@@ -50,7 +51,7 @@ def client(tmp_path, monkeypatch):
     (tmp_path / "config").mkdir(exist_ok=True)
     module.manager.cameras.clear()
     module.manager.vision = Vision()
-    module.manager.settings["adaptation_mode"] = "review"
+    module.manager.settings = dict(DEFAULTS)
     module.enrollment.manager = module.manager
     yield TestClient(module.app)
     module.manager.cameras.clear()
@@ -163,5 +164,34 @@ def test_face_detail_mode_does_not_change_identity_threshold(client):
     threshold=client.get("/api/state").json()["settings"]["match_threshold"]
     assert client.post("/api/settings", json={"face_detection_mode":"head_detail"}).status_code == 200
     state=client.get("/api/state").json()["settings"]
-    assert state["match_threshold"]==threshold and state["face_min_width"]==70
+    assert state["match_threshold"]==threshold and state["face_min_width"]==DEFAULTS['face_min_width']
     assert client.post("/api/settings", json={"face_detection_mode":"unknown"}).status_code == 400
+
+
+def test_complete_office_preset_and_reset_persist_without_deleting_data(client):
+    module = importlib.import_module('app')
+    module.gallery.create_person('Synthetic reset test')
+    camera = client.post('/api/cameras', json={'name':'Synthetic camera',
+        'url':'rtsp://127.0.0.1:18554/test', 'authorized':True}).json()
+    profile = client.get('/api/settings/defaults').json()
+    assert profile['profile'] == SETTINGS_PROFILE == 'office-demo-20261023'
+    expected = dict(match_threshold=.30, match_margin=.06, admission_threshold=.68,
+        admission_margin=.10, adaptation_mode='review', analysis_fps=10., recognition_hz=1.,
+        face_min_width=20, quality_strictness=49, single_reference_mode='review',
+        face_detection_mode='full_frame')
+    assert profile['settings'] == expected == DEFAULTS and len(expected) == 11
+    changed = dict(match_threshold=.55, match_margin=.08, admission_threshold=.8,
+        admission_margin=.2, adaptation_mode='off', analysis_fps=4., recognition_hz=2.,
+        face_min_width=90, quality_strictness=75, single_reference_mode='off',
+        face_detection_mode='head_detail')
+    assert client.post('/api/settings', json=changed).status_code == 200
+    result = client.post('/api/settings', json=profile['settings'])
+    assert result.status_code == 200 and result.json() == expected
+    current = client.get('/api/state').json()
+    assert len(current['people']) == 1
+    assert [c['id'] for c in current['cameras']] == [camera['id']]
+    restarted = Manager(module.manager.root, module.manager.models, 'CPUExecutionProvider', SimpleNamespace())
+    assert restarted.settings == expected
+    assert len(restarted.cameras) == 1
+    profile['settings']['face_min_width'] = 999
+    assert client.get('/api/settings/defaults').json()['settings']['face_min_width'] == 20

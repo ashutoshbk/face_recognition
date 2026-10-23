@@ -19,11 +19,10 @@ def fixture():
     return frame, face
 
 
-def test_default_preserves_existing_quality_checks():
+def test_quality_function_defaults_preserve_original_reference_checks():
     frame, face = fixture()
     query, reference = assess_query_quality(frame, face)
     assert query == reference == assess_quality(frame, face, minimum_width=70)
-    assert DEFAULTS['quality_strictness'] == 50
 
 
 def test_relaxed_query_does_not_relax_reference_learning():
@@ -63,10 +62,10 @@ def test_twenty_pixel_query_does_not_qualify_for_reference_learning():
     assert 'Face too small' in reference['reasons']
 
 
-def test_twenty_pixel_setting_is_allowed_but_default_stays_seventy(tmp_path):
+def test_office_query_default_is_twenty_and_values_below_twenty_are_rejected(tmp_path):
     (tmp_path / 'config').mkdir()
     manager = Manager(tmp_path, tmp_path, 'CPUExecutionProvider', SimpleNamespace())
-    assert manager.settings['face_min_width'] == 70
+    assert manager.settings['face_min_width'] == 20
     manager.update_settings(dict(face_min_width=20))
     assert manager.settings['face_min_width'] == 20
     with pytest.raises(ValueError):
@@ -101,7 +100,7 @@ def test_strictness_validation(tmp_path, value):
         manager.update_settings(dict(quality_strictness=value))
 
 
-def test_restore_quality_defaults_does_not_change_matching(tmp_path):
+def test_explicit_strict_quality_patch_does_not_change_matching(tmp_path):
     (tmp_path / 'config').mkdir()
     manager = Manager(tmp_path, tmp_path, 'CPUExecutionProvider', SimpleNamespace())
     manager.update_settings(dict(match_threshold=.55, quality_strictness=10, face_min_width=45))
@@ -109,3 +108,13 @@ def test_restore_quality_defaults_does_not_change_matching(tmp_path):
     assert manager.settings['match_threshold'] == .55
     assert manager.settings['quality_strictness'] == 50
     assert manager.settings['face_min_width'] == 70
+
+
+def test_saved_site_settings_override_new_install_defaults(tmp_path):
+    (tmp_path / 'config').mkdir()
+    original = Manager(tmp_path, tmp_path, 'CPUExecutionProvider', SimpleNamespace())
+    original.update_settings(dict(match_threshold=.55, face_min_width=90, quality_strictness=75,
+                                 single_reference_mode='off'))
+    restarted = Manager(tmp_path, tmp_path, 'CPUExecutionProvider', SimpleNamespace())
+    assert restarted.settings == original.settings
+    assert restarted.settings != DEFAULTS

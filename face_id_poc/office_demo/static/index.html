@@ -52,11 +52,11 @@
               <label>Minimum face width (px)<input name="face_min_width" type="number" min="20" max="300" step="1" required></label>
               <label for="quality-strictness">Recognition quality strictness</label>
               <div class="field-pair"><input id="quality-strictness" type="range" min="0" max="100" step="1" aria-label="Recognition quality strictness"><input name="quality_strictness" type="number" min="0" max="100" step="1" aria-label="Quality strictness value" required></div>
-              <div class="form-footer"><span class="muted">Relaxed 0 / Default 50 / Strict 100</span><button id="quality-defaults" type="button" title="Restore quality strictness 50 and minimum face width 70 px"><i data-lucide="rotate-ccw" aria-hidden="true"></i>Quality defaults</button></div>
+              <div class="form-footer"><span class="muted">Relaxed 0 / Strict 100</span></div>
               <label>Face detection<select name="face_detection_mode"><option value="full_frame">Full frame</option><option value="head_detail">Full frame + head detail</option></select></label>
             </fieldset>
             <div id="settings-error" class="notice error" role="alert" hidden></div>
-            <div class="form-footer"><span id="settings-status" class="muted" role="status">Waiting for settings</span><button id="save-settings" class="primary" disabled><i data-lucide="check" aria-hidden="true"></i>Save settings</button></div>
+            <div class="form-footer"><span id="settings-status" class="muted" role="status">Waiting for settings</span><div class="actions"><button id="settings-defaults" type="button" title="Restore all 11 Office Demo settings" disabled><i data-lucide="rotate-ccw" aria-hidden="true"></i>Reset all settings</button><button id="save-settings" class="primary" disabled><i data-lucide="check" aria-hidden="true"></i>Save settings</button></div></div>
           </form>
         </section>
         <div class="diagnostic-readouts">

@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from domain import Gallery, QdrantIndex
-from runtime import Manager
+from runtime import DEFAULTS, SETTINGS_PROFILE, Manager
 from enrollment import Enrollment
 
 HERE = Path(__file__).resolve().parent
@@ -82,7 +82,7 @@ def state():
 
 @app.get("/api/health")
 def health():
-    return {"release": "office-evaluation-20261020", "ready": manager.workers_ready and gallery.healthy,
+    return {"release": "office-evaluation-20261023", "ready": manager.workers_ready and gallery.healthy,
             "engine_error": manager.engine_error, "index_error": gallery.error}
 
 
@@ -213,6 +213,11 @@ def camera_frame(identifier: str):
         if c.preview is None:
             raise HTTPException(503, "No processed camera frame yet")
         return Response(c.preview, media_type="image/jpeg", headers={"X-Frame-Id": str(c.processed)})
+
+
+@app.get("/api/settings/defaults")
+def settings_defaults():
+    return {"profile": SETTINGS_PROFILE, "settings": dict(DEFAULTS)}
 
 
 @app.post("/api/settings")

@@ -21,9 +21,11 @@ from domain import HeadTrackIdentity, SingleReferenceReview, best_quality_crops,
 from vision_backend import Vision, HeadTracker, associate_faces, encode_jpeg, assess_query_quality
 
 
-DEFAULTS = dict(match_threshold=.45, match_margin=.06, admission_threshold=.68,
+SETTINGS_PROFILE = "office-demo-20261023"
+# Reproduce the office evaluation, not a production-calibrated operating point.
+DEFAULTS = dict(match_threshold=.30, match_margin=.06, admission_threshold=.68,
                 admission_margin=.10, adaptation_mode="review", analysis_fps=10.,
-                recognition_hz=1., face_min_width=70, quality_strictness=50, single_reference_mode="off",
+                recognition_hz=1., face_min_width=20, quality_strictness=49, single_reference_mode="review",
                 face_detection_mode="full_frame")
 
 

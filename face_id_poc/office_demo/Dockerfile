@@ -34,6 +34,7 @@ ENV PATH=/opt/venv/bin:$PATH \
     OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1
 WORKDIR /app/office_demo
 COPY research_demo/vision /app/research_demo/vision
+RUN chmod -R a+rX /app/research_demo/vision
 COPY research_demo/core.py /app/research_demo/core.py
 COPY office_demo/*.py ./
 COPY office_demo/models_manifest.json ./models_manifest.json

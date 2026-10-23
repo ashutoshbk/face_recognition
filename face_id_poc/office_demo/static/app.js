@@ -10,7 +10,7 @@
   const running = (camera) => ['running', 'starting', 'connecting', 'reconnecting', 'active'].includes(String(camera.state).toLowerCase());
   const app = {tab: 'cameras', data: null, connected: false, busy: new Set(), cameras: new Map(), peopleKey: '', candidatesKey: '', candidates: []};
   const candidateReview = {candidate: null, key: '', busy: false, referenceLoaded: false, cropLoaded: false};
-  let stateTimer, stateFlight, candidateTimer, candidateFlight, toastTimer;
+  let stateTimer, stateFlight, candidateTimer, candidateFlight, toastTimer, recognitionPhotoUrl;
   let disposed = false;
 
   function redact(value) {
@@ -110,6 +110,176 @@
     }
   }
 
+  function recognitionName(track) {
+    const name = track.person_name ?? track.identity?.name ?? track.name;
+    return typeof name === 'string' && name.trim() ? name.trim() : null;
+  }
+
+  function identity(track) {
+    const state = String(track.identity_status ?? track.match_status ?? track.identity?.status ?? track.state ?? track.status ?? '').toLowerCase();
+    if (state === 'tracked') return {label: 'Head-tracked', className: 'tracked'};
+    if (track.confirmed === true || track.identity_confirmed === true || state === 'confirmed') return {label: 'Confirmed', className: 'confirmed'};
+    if (recognitionName(track)) return {label: 'Tentative', className: 'tentative'};
+    return {label: 'Unconfirmed', className: 'neutral'};
+  }
+
+  class RecognitionHistory {
+    constructor(limit = 20) {
+      this.limit = limit;
+      this.clear();
+    }
+
+    clear() {
+      this.entries = [];
+      this.byTrack = new Map();
+      this.suppressed = new Set();
+      this.generation = undefined;
+      this.session = 0;
+    }
+
+    update(camera, people, now = Date.now()) {
+      if (this.generation !== camera.generation) {
+        this.generation = camera.generation;
+        this.session++;
+        this.byTrack.clear();
+        this.suppressed.clear();
+      }
+      const roster = new Map(list(people).map((person) => [String(person.id), person.name]));
+      this.entries = this.entries.filter((entry) => !entry.personId || roster.has(entry.personId));
+      const retained = new Set(this.entries);
+      for (const [key, entry] of this.byTrack) if (!retained.has(entry)) this.byTrack.delete(key);
+      for (const entry of this.entries) {
+        entry.present = false;
+        entry.revalidated = false;
+        if (entry.personId) entry.name = roster.get(entry.personId);
+      }
+      const tracks = list(camera.tracks);
+      const keyFor = (track) => this.session + ':' + String(track.id ?? track.track_id);
+      const present = new Set(tracks.map(keyFor));
+      for (const key of this.suppressed) if (!present.has(key)) this.suppressed.delete(key);
+      for (const track of tracks) {
+        if (track.id == null && track.track_id == null) continue;
+        const key = keyFor(track);
+        let entry = this.byTrack.get(key);
+        if (entry) entry.present = true;
+        const name = recognitionName(track);
+        const state = String(track.identity_status ?? track.match_status ?? track.identity?.status ?? track.state ?? track.status ?? '').toLowerCase();
+        const rejected = ['unknown', 'no usable face', 'quality rejected', 'association ambiguous', 'recognition unavailable'].includes(state);
+        const personId = track.person_id == null ? null : String(track.person_id);
+        if (!name || rejected || (personId && !roster.has(personId)) || this.suppressed.has(key)) continue;
+        if (!entry) {
+          entry = {key, trackId: String(track.id ?? track.track_id), firstSeen: now};
+          this.byTrack.set(key, entry);
+          this.entries.unshift(entry);
+        }
+        const nextName = personId ? roster.get(personId) : name;
+        if (entry.name && (entry.personId !== personId || entry.name !== nextName)) {
+          entry.previousName = entry.name;
+          entry.firstSeen = now;
+          entry.snapshotCandidate = null;
+        }
+        entry.name = nextName;
+        entry.personId = personId;
+        entry.lastSeen = now;
+        entry.present = true;
+        entry.revalidated = true;
+        entry.decision = identity(track);
+        entry.lastDecision = entry.decision.className === 'tracked' ? {label: 'Confirmed', className: 'confirmed'} : entry.decision;
+        const score = track.score ?? track.match_score ?? track.similarity;
+        entry.score = score != null && Number.isFinite(Number(score)) ? Number(score) : null;
+        const samples = list(track.samples).filter((sample) => sample.id && personId &&
+          String(sample.person_id) === personId && ['tentative', 'confirmed'].includes(String(sample.state).toLowerCase()) &&
+          sample.quality_score != null && Number.isFinite(Number(sample.quality_score)));
+        samples.sort((a, b) => Number(b.quality_score) - Number(a.quality_score));
+        if (samples.length) entry.snapshotCandidate = {id: String(samples[0].id), quality: Number(samples[0].quality_score)};
+      }
+      while (this.entries.length > this.limit) {
+        const removed = this.entries.pop();
+        this.byTrack.delete(removed.key);
+        if (present.has(removed.key)) this.suppressed.add(removed.key);
+      }
+      return this.entries;
+    }
+  }
+
+  function recognitionSnapshotKey(entry) {
+    return JSON.stringify([entry.key, entry.personId ?? entry.name]);
+  }
+
+  class RecognitionSnapshots {
+    constructor(onChange, options = {}) {
+      this.onChange = onChange;
+      this.fetcher = options.fetcher || ((...args) => fetch(...args));
+      this.createUrl = options.createUrl || ((blob) => URL.createObjectURL(blob));
+      this.revokeUrl = options.revokeUrl || ((url) => URL.revokeObjectURL(url));
+      this.items = new Map();
+    }
+
+    get(entry) {
+      return this.items.get(recognitionSnapshotKey(entry));
+    }
+
+    release(item) {
+      item.controller?.abort();
+      if (item.url) this.revokeUrl(item.url);
+      item.blob = item.url = null;
+    }
+
+    clear() {
+      for (const item of this.items.values()) this.release(item);
+      this.items.clear();
+    }
+
+    sync(entries) {
+      const keys = new Set(entries.map(recognitionSnapshotKey));
+      for (const [key, item] of this.items) if (!keys.has(key)) {
+        this.release(item);
+        this.items.delete(key);
+      }
+      for (const entry of entries) {
+        const sample = entry.snapshotCandidate;
+        if (!sample) continue;
+        const key = recognitionSnapshotKey(entry);
+        let item = this.items.get(key);
+        if (!item) {
+          item = {url: null, blob: null, quality: -Infinity, sampleId: null, failedId: null, pending: false};
+          this.items.set(key, item);
+        }
+        if (item.pending || sample.id === item.failedId || sample.id === item.sampleId ||
+            (item.url && sample.quality <= item.quality)) continue;
+        item.pending = true;
+        item.controller = new AbortController();
+        item.promise = this.load(key, item, sample);
+      }
+    }
+
+    async load(key, item, sample) {
+      const timeout = setTimeout(() => item.controller.abort(), 5000);
+      try {
+        const response = await this.fetcher('/api/samples/' + idPath(sample.id) + '/photo', {
+          cache: 'no-store', credentials: 'same-origin', redirect: 'error', signal: item.controller.signal,
+        });
+        if (!response.ok || Number(response.headers.get('content-length')) > 2000000) throw new Error('Snapshot unavailable');
+        const blob = await response.blob();
+        if (!blob.size || blob.size > 2000000 || !['image/jpeg', 'image/png', 'image/webp'].includes(blob.type)) throw new Error('Invalid snapshot');
+        if (this.items.get(key) !== item || item.controller.signal.aborted) return;
+        const url = this.createUrl(blob);
+        if (item.url) this.revokeUrl(item.url);
+        item.url = url;
+        item.blob = blob;
+        item.quality = sample.quality;
+        item.sampleId = sample.id;
+        item.failedId = null;
+      } catch {
+        if (this.items.get(key) === item) item.failedId = sample.id;
+      } finally {
+        clearTimeout(timeout);
+        item.pending = false;
+        if (this.items.get(key) === item) this.onChange();
+      }
+    }
+  }
+
   class CameraTile {
     constructor(camera) {
       this.id = String(camera.id);
@@ -117,12 +287,14 @@
       this.active = false;
       this.epoch = 0;
       this.frameUrl = null;
+      this.history = new RecognitionHistory();
+      this.snapshots = new RecognitionSnapshots(() => this.renderRecognitions());
       this.element = document.createElement('article');
       this.element.className = 'camera-tile';
       this.element.dataset.id = this.id;
       this.element.innerHTML = '<div class="camera-header"><div class="camera-title"><h3></h3><div class="camera-source"></div></div><div class="camera-controls"><button class="icon-button" data-action="camera-toggle"><i data-lucide="play"></i></button><button class="icon-button danger" data-action="camera-delete" title="Delete camera" aria-label="Delete camera"><i data-lucide="trash-2"></i></button></div></div>' +
         '<div class="camera-frame"><img hidden><div class="frame-placeholder"><i data-lucide="video-off"></i><span>Camera stopped</span></div><span class="frame-state" hidden></span></div>' +
-        '<div class="camera-info"><span class="camera-status badge neutral"></span><span class="camera-track-count"></span><span class="camera-fps"></span></div><div class="track-list"></div><details class="camera-evidence"><summary>Track evidence / Best-quality crops</summary><div class="evidence-body"></div></details><div class="camera-error notice error" hidden></div>';
+        '<div class="camera-info"><span class="camera-status badge neutral"></span><span class="camera-track-count"></span><span class="camera-fps"></span></div><div class="recognition-heading"><h4>Recent recognitions</h4><span class="recognition-count"></span></div><div class="track-list" role="list" aria-label="Recent recognitions"></div><details class="camera-evidence"><summary>Track evidence / Best-quality crops</summary><div class="evidence-body"></div></details><div class="camera-error notice error" hidden></div>';
       this.img = this.element.querySelector('img');
       this.frame = this.element.querySelector('.camera-frame');
       this.frame.dataset.id = this.id;
@@ -149,9 +321,18 @@
       const tracks = list(camera.tracks);
       const counts = camera.face_counts;
       this.element.querySelector('.camera-track-count').textContent = tracks.length + (tracks.length === 1 ? ' track' : ' tracks') + (counts ? ' / ' + counts.detected + ' faces / ' + counts.usable + ' usable' : '');
-      const trackHtml = tracks.length ? tracks.map(trackMarkup).join('') : '<div class="inline-empty">No active tracks</div>';
-      const trackList = this.element.querySelector('.track-list');
-      if (trackList.innerHTML !== trackHtml) trackList.innerHTML = trackHtml;
+      const settingsKey = JSON.stringify(app.data?.settings || {});
+      const uptime = app.data?.metrics?.uptime_seconds;
+      if ((this.settingsKey !== undefined && this.settingsKey !== settingsKey) ||
+          (uptime != null && this.uptime != null && uptime < this.uptime)) {
+        this.history.clear();
+        this.snapshots.clear();
+      }
+      this.settingsKey = settingsKey;
+      this.uptime = uptime;
+      const recent = this.history.update(camera, app.data?.people);
+      this.snapshots.sync(recent);
+      this.renderRecognitions();
       const evidence = this.element.querySelector('.camera-evidence');
       evidence.querySelector('summary').textContent = 'Track evidence / Best-quality crops / ' + tracks.length + (tracks.length === 1 ? ' track' : ' tracks');
       const evidenceKey = JSON.stringify(tracks.map((track) => [track.id ?? track.track_id, track.name, track.person_name, track.votes, track.observations, track.samples]));
@@ -164,6 +345,14 @@
       error.textContent = camera.error ? redact(camera.error) : '';
       error.hidden = !camera.error;
       this.sync();
+    }
+
+    renderRecognitions() {
+      const recent = this.history.entries;
+      this.element.querySelector('.recognition-count').textContent = recent.length + ' / ' + this.history.limit;
+      const trackHtml = recent.length ? recent.map((entry) => recognitionMarkup(entry, this.snapshots.get(entry))).join('') : '<div class="inline-empty">No recognitions yet</div>';
+      const trackList = this.element.querySelector('.track-list');
+      if (trackList.innerHTML !== trackHtml) trackList.innerHTML = trackHtml;
     }
 
     sync() {
@@ -244,6 +433,7 @@
 
     destroy() {
       observer.unobserve(this.frame);
+      this.snapshots.clear();
       this.stop(true);
       this.element.remove();
     }
@@ -256,14 +446,6 @@
     }
   }, {threshold: 0.01});
 
-  function identity(track) {
-    const state = String(track.identity_status ?? track.match_status ?? track.identity?.status ?? track.state ?? track.status ?? '').toLowerCase();
-    if (state === 'tracked') return {label: 'Head-tracked', className: 'tracked'};
-    if (track.confirmed === true || track.identity_confirmed === true || state === 'confirmed') return {label: 'Confirmed', className: 'confirmed'};
-    if (state === 'tentative' || track.person_name || track.identity?.name) return {label: 'Tentative', className: 'tentative'};
-    return {label: 'Unconfirmed', className: 'neutral'};
-  }
-
   function admission(track) {
     let value = track.admission_status ?? track.registered_admission ?? track.admission ?? track.admitted;
     if (value && typeof value === 'object') value = value.status ?? value.passed ?? value.accepted;
@@ -273,12 +455,18 @@
     return 'Not reported';
   }
 
-  function trackMarkup(track) {
-    const decision = identity(track);
-    const name = track.person_name ?? track.identity?.name ?? track.name ?? 'Unknown person';
-    const age = track.last_face_match_age_seconds;
-    const matchAge = age != null && track.identity_basis === 'head_track' ? '<div class="track-admission">Last face match ' + numeric(age, 1) + ' s ago; carried by head track</div>' : '';
-    return '<div class="track-row"><div class="track-name">' + esc(name) + '<span class="badge ' + decision.className + '">' + decision.label + '</span><span class="track-id">Track ' + esc(track.id ?? track.track_id ?? '-') + '</span></div><span class="track-score">Score ' + numeric(track.score ?? track.match_score ?? track.similarity) + '</span>' + matchAge + '<div class="track-admission">Registered-only admission: ' + admission(track) + '</div></div>';
+  function recognitionTime(value) {
+    const date = new Date(value);
+    return '<time datetime="' + date.toISOString() + '" title="' + esc(date.toLocaleString()) + '">' +
+      esc(date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'})) + '</time>';
+  }
+
+  function recognitionMarkup(entry, snapshot) {
+    const decision = entry.present && !entry.revalidated ? {label: 'Not revalidated', className: 'neutral'} : entry.present ? entry.decision : entry.lastDecision;
+    const presence = entry.present ? entry.revalidated ? 'Current track' : 'No current match' : 'Earlier match';
+    const correction = entry.previousName ? '<div class="recognition-correction">Updated from ' + esc(entry.previousName) + '</div>' : '';
+    const photo = snapshot?.url ? '<button class="recognition-photo" data-action="recognition-photo" data-entry="' + esc(entry.key) + '" title="Enlarge observed face crop" aria-label="Enlarge observed face crop for ' + esc(entry.name) + '"><img src="' + esc(snapshot.url) + '" alt="Observed camera face crop"><span>Camera crop</span></button>' : '<div class="recognition-photo recognition-photo-empty" role="img" aria-label="Observed snapshot unavailable"><span>' + (snapshot?.pending ? 'Loading' : 'No snapshot') + '</span></div>';
+    return '<div class="track-row" role="listitem">' + photo + '<div class="recognition-summary"><div class="track-name">' + esc(entry.name) + '<span class="badge ' + decision.className + '">' + decision.label + '</span><span class="track-id">Track ' + esc(entry.trackId) + '</span></div><span class="track-score">Match ' + numeric(entry.score) + '</span><div class="recognition-times">First seen ' + recognitionTime(entry.firstSeen) + '<span>Last seen ' + recognitionTime(entry.lastSeen) + '</span></div><div class="recognition-presence">' + presence + '</div>' + correction + '</div></div>';
   }
 
   function evidenceMarkup(tracks) {
@@ -286,7 +474,8 @@
     return tracks.map((track) => {
       const samples = list(track.samples).slice(0, 5);
       const votes = track.votes == null ? 'Current votes not reported' : 'Current votes ' + track.votes + ' / ' + (track.observations ?? '-');
-      return '<section class="evidence-track"><div class="evidence-heading"><strong>' + esc(track.person_name ?? track.name ?? 'Track ' + (track.id ?? track.track_id ?? '-')) + '</strong><span>' + esc(votes) + '</span></div>' + (samples.length ? '<div class="sample-strip">' + samples.map((sample) => '<figure><button class="sample-open" data-action="sample-open" data-sample="' + esc(sample.id) + '" title="Inspect track sample" aria-label="Inspect track sample"><img data-src="' + esc(imageUrl(sample.url, '/api/samples/' + idPath(sample.id) + '/photo')) + '" alt="Best-quality track crop"></button><figcaption>Quality ' + numeric(sample.quality_score ?? sample.quality?.score) + '</figcaption></figure>').join('') + '</div>' : '<div class="inline-empty">No sample photos</div>') + '</section>';
+      const matchAge = track.identity_basis === 'head_track' && track.last_face_match_age_seconds != null ? ' / Last face match ' + numeric(track.last_face_match_age_seconds, 1) + ' s ago' : '';
+      return '<section class="evidence-track"><div class="evidence-heading"><strong>' + esc(track.person_name ?? track.name ?? 'Track ' + (track.id ?? track.track_id ?? '-')) + '</strong><span>' + esc(votes) + '</span></div><div class="evidence-status">' + esc(track.state || 'Unknown') + ' / Registered-only admission: ' + admission(track) + matchAge + '</div>' + (samples.length ? '<div class="sample-strip">' + samples.map((sample) => '<figure><button class="sample-open" data-action="sample-open" data-sample="' + esc(sample.id) + '" title="Inspect track sample" aria-label="Inspect track sample"><img data-src="' + esc(imageUrl(sample.url, '/api/samples/' + idPath(sample.id) + '/photo')) + '" alt="Best-quality track crop"></button><figcaption>Quality ' + numeric(sample.quality_score ?? sample.quality?.score) + '</figcaption></figure>').join('') + '</div>' : '<div class="inline-empty">No sample photos</div>') + '</section>';
     }).join('');
   }
 
@@ -620,7 +809,7 @@
     $('single-reference-warning').hidden = settingInput('single_reference_mode').value !== 'review';
     $('quality-strictness').value = settingInput('quality_strictness').value;
     $('quality-strictness').disabled = settingInput('quality_strictness').disabled;
-    $('quality-defaults').disabled = savingSettings || !app.connected || settingValue('quality_strictness') == null;
+    $('settings-defaults').disabled = savingSettings || !app.connected;
     $('save-settings').disabled = savingSettings || !app.connected || !dirtySettings.size;
     $('settings-status').textContent = savingSettings ? 'Saving...' : dirtySettings.size ? 'Unsaved changes' : app.data ? 'Current settings' : 'Waiting for settings';
   }
@@ -639,18 +828,22 @@
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
 
-  $('quality-defaults').addEventListener('click', async () => {
+  $('settings-defaults').addEventListener('click', async () => {
     if (savingSettings || !app.connected) return;
     savingSettings = true;
     syncSettings();
     notice('settings-error', '');
     try {
-      await api('/api/settings', json('POST', { quality_strictness: 50, face_min_width: 70 }));
-      dirtySettings.delete('quality_strictness');
-      dirtySettings.delete('face_min_width');
+      const preset = await api('/api/settings/defaults');
+      if (!preset?.settings || settingNames.some((name) => !Object.hasOwn(preset.settings, name)) ||
+          Object.keys(preset.settings).length !== settingNames.length) throw new Error('Incomplete default settings; nothing was reset.');
+      const summary = settingNames.map((name) => name.replace(/_/g, ' ') + ': ' + describe(preset.settings[name])).join('\n');
+      if (!(await confirmAction('Reset all settings?', 'Restore the Office Demo evaluation preset? These are not production-calibrated thresholds. Cameras and enrolled people will not be removed.\n\n' + summary, 'Reset all', false))) return;
+      await api('/api/settings', json('POST', preset.settings));
+      dirtySettings.clear();
       if (stateFlight) await stateFlight;
       await refreshState();
-      toast('Quality defaults restored.');
+      toast('All settings restored to the Office Demo preset.');
     } catch (error) { notice('settings-error', error.message); }
     finally { savingSettings = false; syncSettings(); }
   });
@@ -738,7 +931,18 @@
     const id = tile.dataset.id;
     const camera = app.cameras.get(id)?.camera;
     if (!camera) return;
-    if (button.dataset.action === 'sample-open') {
+    if (button.dataset.action === 'recognition-photo') {
+      const cameraTile = app.cameras.get(id);
+      const entry = cameraTile.history.entries.find((item) => item.key === button.dataset.entry);
+      const snapshot = entry && cameraTile.snapshots.get(entry);
+      if (!snapshot?.blob) return;
+      if (recognitionPhotoUrl) URL.revokeObjectURL(recognitionPhotoUrl);
+      recognitionPhotoUrl = URL.createObjectURL(snapshot.blob);
+      $('photo-title').textContent = entry.name + ' / observed camera crop';
+      $('photo-large').src = recognitionPhotoUrl;
+      $('photo-details').textContent = (camera.name || 'Camera') + ' / Track ' + entry.trackId + ' / Crop quality ' + numeric(snapshot.quality, 1) + ' / ' + (entry.present && !entry.revalidated ? 'Not revalidated' : entry.lastDecision.label);
+      $('photo-dialog').showModal();
+    } else if (button.dataset.action === 'sample-open') {
       const sample = list(camera.tracks).flatMap((track) => list(track.samples)).find((item) => String(item.id) === button.dataset.sample);
       if (!sample) return;
       $('photo-title').textContent = (camera.name || 'Camera') + ' / track evidence';
@@ -1064,7 +1268,11 @@
   $('enroll-dialog').addEventListener('close', () => { if ($('webcam-dialog').open) $('webcam-dialog').close(); stopWebcam(); resetEnrollment(); });
   $('camera-dialog').addEventListener('cancel', (event) => { if (app.busy.has('add-camera')) event.preventDefault(); });
   $('camera-dialog').addEventListener('close', () => { $('camera-form').reset(); notice('camera-error', ''); });
-  $('photo-dialog').addEventListener('close', () => $('photo-large').removeAttribute('src'));
+  $('photo-dialog').addEventListener('close', () => {
+    $('photo-large').removeAttribute('src');
+    if (recognitionPhotoUrl) URL.revokeObjectURL(recognitionPhotoUrl);
+    recognitionPhotoUrl = null;
+  });
   document.addEventListener('error', (event) => {
     if (event.target === $('photo-large')) {
       event.target.hidden = true;
@@ -1115,7 +1323,9 @@
     clearTimeout(stateTimer);
     clearTimeout(candidateTimer);
     clearThumbnails();
-    for (const tile of app.cameras.values()) tile.stop(true);
+    for (const tile of app.cameras.values()) { tile.stop(true); tile.snapshots.clear(); }
+    if (recognitionPhotoUrl) URL.revokeObjectURL(recognitionPhotoUrl);
+    recognitionPhotoUrl = null;
   });
   window.addEventListener('pageshow', (event) => {
     if (!event.persisted) return;

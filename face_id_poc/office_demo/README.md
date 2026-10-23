@@ -15,6 +15,11 @@ this entry point. Shared research Python modules are source dependencies only;
 there is no DigiFace download, synthetic-gallery build, research-service startup,
 or 10G model installation in this runbook.
 
+The **23 October update** adds stable recent-recognition cards with observed
+camera snapshots and an all-settings reset. See the
+[release and upgrade checklist](RELEASE_20261023.md) before updating an existing
+installation. Existing saved settings, cameras and people are retained.
+
 ## Contents
 
 - [Scope, Rights and Safety](#scope-rights-and-safety)
@@ -268,7 +273,7 @@ Run as the operator who will own the private data. For a new normal installation
 ```bash
 umask 077
 export OFFICE_PROJECT_NAME=camex-office-demo
-export OFFICE_IMAGE=camex-office-demo:cuda12.2-ort1.18.0
+export OFFICE_IMAGE=camex-office-demo:office-20261023
 export OFFICE_RUNTIME_DIR="$HOME/camex-office-runtime"
 export OFFICE_MODELS_DIR="$HOME/camex-office-models"
 export OFFICE_FIXTURE_DIR="$HOME/camex-office-fixture"
@@ -632,31 +637,36 @@ Camera-local head IDs are not cross-camera re-identification IDs.
 
 ### Normal settings and explicit test settings
 
-Open **Diagnostics > Evaluation settings**. Normal delivery starts with:
+Open **Diagnostics > Evaluation settings**. A fresh installation starts with the
+**Office Demo evaluation preset** (`office-demo-20261023`):
 
 | Control | Default | Meaning |
 | --- | --- | --- |
-| Recognition quality strictness | 50 | Original blur, lighting and head-angle checks |
-| Minimum face width | 70 px | Native detected face width for recognition queries |
-| Match threshold / margin | 0.45 / 0.06 | Cosine and other-person separation gates |
+| Recognition quality strictness | 49 | Query eligibility, separate from enrollment quality |
+| Minimum face width | 20 px | Native detected face width for diagnostic recognition queries |
+| Match threshold / margin | 0.30 / 0.06 | Cosine and other-person separation gates |
 | Admission threshold / margin | 0.68 / 0.10 | Stricter registered-only reference gates |
 | Analysis FPS / Recognition Hz | 10 / 1 | Scheduling targets, not promised throughput |
 | Adaptation mode | Review | Human review of qualifying live candidates |
-| Single-reference mode | Off | No one-photo bootstrap unless explicitly enabled |
+| Single-reference mode | Review | Strict one-photo bootstrap proposals require explicit human approval |
 | Face detection | Full frame | SCRFD-2.5G; optional bounded head-detail diagnostic |
 
 The quality slider ranges from 0 relaxed to 100 strict and has a numeric input.
 It changes query eligibility, not the identity similarity threshold or the
 quality score. The face-width control can go down to **20 px for diagnostic
-query testing only**. Choose **Save settings** after changes. **Quality defaults**
-immediately restores strictness 50 and face width 70 without changing matching,
-admission or other unsaved fields. It is not a reset of all settings.
+query testing only**. Choose **Save settings** after changes. **Reset all settings**
+fetches the complete preset from `GET /api/settings/defaults`, asks for confirmation,
+and restores all 11 controls in one validated settings update. The result is
+saved to `config/settings.json`; no additional Save click is needed. Cameras,
+people and registered/live photos are not deleted. Upgrades do not overwrite
+existing saved settings; use Reset explicitly to adopt this preset.
 
-For the explicitly requested permissive live test, the setting pair is
-**minimum face width 20 px / quality strictness 10**. This is **not** the normal
-default or a validated operating threshold. The currently restarted 2.5G
-three-clip setup remains at **strictness 50 / width 70** unless the operator
-explicitly changes it. Keep normal/default and permissive-test results separate.
+This preset reproduces the office test, not a calibrated production threshold.
+Small, blurred or oblique faces and a lower matching threshold may increase
+false matches. The earlier 0.10 threshold / quality 10 experiment is **not** the
+delivery preset. For a separate stricter comparison, explicitly set threshold
+0.45, margin 0.06, width 70 and quality 50, then Save settings. Keep test results
+and settings recorded separately. Registered-photo quality remains strict.
 
 Relaxing queries can increase false matches. Clipped faces, low detector
 confidence and ambiguous head associations remain blocked. Registered and live
@@ -696,6 +706,32 @@ A confirmed identity can stay attached to a continuous, unambiguous observed
 head when the face turns away or fails query quality. The UI displays
 **Head-tracked** with the age of the last face match, not a fresh face confirmation.
 It does not grant new votes or permission to save live references.
+
+The panel below each camera shows **Recent recognitions**, not all active heads.
+It retains up to 20 named track entries during the current browser session,
+newest first. Repeated matches update the same entry, including the latest
+similarity score and first/last-seen times in the browser's local timezone.
+These times describe observations by the open dashboard, not an audit log.
+Tentative results stay labelled Tentative; missing current evidence is marked
+Not revalidated, and departed tracks are marked Earlier match. A revised name
+updates the existing row and identifies the previous name. History is cleared
+on page reload, recognition-setting changes or a detected backend restart.
+Deleted people are removed from the history. The frontend does not create new
+recognition evidence or promote a tentative match to Confirmed.
+
+Each recognition can include a clickable **Camera crop** from the observed face,
+not the person's enrolled portrait. Only a sample belonging to that proposed
+identity is used. A better-quality crop may replace it. The snapshot remains
+in browser memory with its history entry after the short-lived sample endpoint
+expires; it is not stored in local storage or added to the enrollment gallery.
+Snapshot requests are deduplicated, limited to 2 MB each, and discarded when
+the identity changes or its entry leaves the bounded history. If no observed
+crop is available, the row says No snapshot rather than substituting an
+enrolled portrait. Image availability does not confirm the proposed identity.
+
+Unknown heads, rejected faces, voting details, last-face-match age and crop
+previews remain in the expandable **Track evidence** section. Changing the
+presentation does not change tracking, matching or live-photo admission rules.
 
 Missing detections can coast internally for at most 0.8 seconds, without drawing
 a held box/label. ByteTrack may reconnect the same local ID within its two-second
@@ -859,11 +895,11 @@ their URLs entered privately. Use exactly those three inputs, not the optional
 five-connection fixture. Their stated alignment is input context; this release
 check does not independently certify NTP/camera-clock synchronization.
 
-First verify **SCRFD-2.5G, strictness 50, width 70** in Diagnostics and collect a
-baseline. Only when deliberately evaluating the permissive preset, change
-**width to 20 px and strictness to 10**, Save settings and record a separate
-result. Neither that test nor these instructions change normal defaults.
-Use **Quality defaults** to return to 50/70 before restarting normal evaluation.
+First verify **SCRFD-2.5G** and the Office Demo preset from section 9. Collect a
+baseline with those settings. For a stricter comparison, explicitly set threshold
+0.45, margin 0.06, width 70 and quality 50, Save settings and record a separate
+result. **Reset all settings** returns to the complete Office Demo preset,
+including its 20-pixel query minimum; it does not mean a stricter 70-pixel profile.
 
 Acceptance checks: model CUDA execution; expected three records; fresh decoded
 frames and current overlays; correct single/bulk preview and commit; isolated

@@ -25,7 +25,7 @@ def copy_source(source, destination):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tag", default="camex-office-demo:cuda12.2-ort1.18.0")
+    parser.add_argument("--tag", default="camex-office-demo:office-20261023")
     args = parser.parse_args()
     office = Path(__file__).resolve().parents[1]
     root = office.parent
