@@ -1,0 +1,19 @@
+{
+  "bundle": {
+    "file": "CAMEX_Research_Models_20261014.zip",
+    "sha256": "b20a00498d13d9bf9ea65f25122d9b9e3f02084667965f1c84d68afa8426bd86",
+    "url": "https://drive.google.com/file/d/1IjOGiSdDmSLfYzq87wOLKDb5OwFdN83R/view"
+  },
+  "models": {
+    "arcface-r50-w600k-112x112.onnx": "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43",
+    "scrfd-kps-2.5g-640x640.onnx": "a2a876b5ad23e66a8b3973112ff137f98414c214b17c31a45955d26e54b58cbf",
+    "yolox-tiny-crowdhuman-416x416.onnx": "7880da82285f9cedd92c46c3c8edece6e751ce8558f4be080ea6325d2a19d56e"
+  },
+  "scrfd_10g": {
+    "file": "det_10g.onnx",
+    "sha256": "5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91",
+    "archive_url": "https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip",
+    "archive_sha256": "80ffe37d8a5940d59a7384c201a2a38d4741f2f3c51eef46ebb28218a7b0ca2f"
+  },
+  "notice": "Code access and staff consent do not grant model rights. Confirm the original checkpoint licences before any commercial, paid-client or production use."
+}

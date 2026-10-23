@@ -1,0 +1,95 @@
+{
+  "date": "2026-10-14",
+  "platform": "Apple M1 Pro / macOS / Python 3.11 / CPU",
+  "clean_venv_installed": true,
+  "dataset_archives_reused_read_only": true,
+  "new_smoke_gallery": {
+    "gallery_vectors": 256,
+    "queries": 63,
+    "search_latency_ms": {
+      "p50": 0.5122500006109476,
+      "p95": 0.6094456002756488,
+      "p99": 0.7723924217862084,
+      "mean": 0.5288598575076783,
+      "maximum": 0.9444169991184026,
+      "count": 63
+    },
+    "synthetic_closed_set_top1": 0.9682539682539683
+  },
+  "tests": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "61",
+    "time": "12.556"
+  },
+  "browser": {
+    "passed": true,
+    "metrics": {
+      "fps": "7.3",
+      "preview_fps": "7.3",
+      "score": "0.999",
+      "search": "2.42 ms",
+      "lead": "0.700"
+    },
+    "frame_synchronization": {
+      "frame_id": "141",
+      "overlay_frame_id": "141",
+      "maximum_channel_error": 1,
+      "mode": "synchronized"
+    },
+    "process_isolation": {
+      "tracking_pid": 96484,
+      "recognition_pid": 96557,
+      "all": {
+        "frames": 63,
+        "p50_ms": 122.06,
+        "p95_ms": 163.82,
+        "maximum_ms": 211.98
+      },
+      "recognition_running": {
+        "frames": 16,
+        "p50_ms": 121.16,
+        "p95_ms": 135.07,
+        "maximum_ms": 135.11
+      },
+      "recognition_idle": {
+        "frames": 47,
+        "p50_ms": 122.06,
+        "p95_ms": 164.31,
+        "maximum_ms": 211.98
+      },
+      "individual_thumbnail_requests": 0
+    },
+    "checks": [
+      "explicit enrollment writes Qdrant",
+      "256 synthetic + 1 self query",
+      "self top1 + threshold + 3/5 votes",
+      "threshold slider updates settings",
+      "different synthetic face rejected even at zero threshold",
+      "five candidate images rendered",
+      "desktop/mobile layout",
+      "profile removal from SQLite and Qdrant",
+      "original benchmark untouched",
+      "changing-frame pixels and overlay IDs match despite injected network delay",
+      "face detection every analyzed frame",
+      "background recognition timing and gallery size visible"
+    ]
+  },
+  "rtsp": {
+    "passed": true,
+    "source": "Local synthetic RTSP H.264/TCP stream",
+    "frames_analyzed": 36,
+    "registration_and_match": true,
+    "stream_loss_rejected": true,
+    "gallery_size": 257,
+    "tracking_pid": 92218,
+    "recognition_pid": 92437,
+    "real_ip_camera_tested": false
+  },
+  "physical_webcam_acceptance_tested": false,
+  "physical_ip_camera_tested": false,
+  "ubuntu_physical_machine_tested": false,
+  "scope": "Synthetic integration fixtures; one temporary fictional self profile, removed after testing."
+}

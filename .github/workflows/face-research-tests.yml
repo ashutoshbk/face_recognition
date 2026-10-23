@@ -1,0 +1,31 @@
+name: Face research source tests
+on:
+  push:
+    branches: [codex/local-face-research-20261014]
+    paths: ['face_id_poc/research_demo/**', '.github/workflows/face-research-tests.yml']
+  pull_request:
+    paths: ['face_id_poc/research_demo/**', '.github/workflows/face-research-tests.yml']
+permissions:
+  contents: read
+jobs:
+  source-tests:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: face_id_poc/research_demo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: face_id_poc/research_demo
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: bash bootstrap.sh
+      - run: .venv/bin/python -m pytest -q --junitxml=source-tests.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ubuntu-source-tests
+          path: face_id_poc/research_demo/source-tests.xml
+# Weights and research datasets are deliberately absent. Model/camera integration
+# tests skip in CI and must be run separately with the controlled research bundle.

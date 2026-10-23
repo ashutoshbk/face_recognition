@@ -1,0 +1,20 @@
+# Used at the root of the allowlisted context made by scripts/build_image.py.
+**/.git
+**/.DS_Store
+**/._*
+**/__pycache__
+**/*.pyc
+**/.venv*
+**/.env*
+**/.runtime*
+**/runtime
+**/models
+**/fixtures
+**/inputs
+**/outputs
+**/Face_ID
+**/node_modules
+**/*.mp4
+**/*.onnx
+**/*.sqlite*
+**/*.zip

@@ -1,0 +1,18 @@
+# Python 3.10; independent of research_demo's newer workstation environment.
+numpy==1.26.4
+scipy==1.13.1
+opencv-python-headless==4.10.0.84
+scikit-image==0.24.0
+Pillow==10.4.0
+onnx==1.16.1
+protobuf==4.25.5
+lap==0.5.12
+cython-bbox==0.1.5
+fastapi==0.115.6
+starlette==0.41.3
+pydantic==2.10.6
+uvicorn==0.34.0
+python-multipart==0.0.20
+qdrant-client==1.15.1
+httpx==0.28.1
+psutil==6.0.0

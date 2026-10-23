@@ -1,0 +1,91 @@
+name: ${OFFICE_PROJECT_NAME:-camex-office-demo}
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.15.5
+    restart: "no"
+    environment:
+      QDRANT__TELEMETRY_DISABLED: "true"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks: [database]
+
+  app:
+    image: ${OFFICE_IMAGE:-camex-office-demo:office-20261023}
+    platform: linux/amd64
+    restart: "no"
+    init: true
+    user: "${OFFICE_UID:-1000}:${OFFICE_GID:-1000}"
+    environment:
+      CAMEX_OFFICE_HOME: /runtime
+      CAMEX_OFFICE_MODELS: /models
+      CAMEX_OFFICE_PROVIDER: CUDAExecutionProvider
+      CAMEX_OFFICE_QDRANT_URL: http://qdrant:6333
+      CAMEX_OFFICE_HWDECODE: "${OFFICE_HWDECODE:-0}"
+      CAMEX_OFFICE_FACE_MODEL: "${OFFICE_FACE_MODEL:-scrfd_2.5g}"
+      CAMEX_OFFICE_CAMERA_LIMIT: "${OFFICE_CAMERA_LIMIT:-32}"
+      CAMEX_OFFICE_ALLOW_AUTO_ADMISSION: "${CAMEX_OFFICE_ALLOW_AUTO_ADMISSION:-0}"
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
+      OPENCV_FFMPEG_CAPTURE_OPTIONS: rtsp_transport;tcp
+    entrypoint: ["/bin/sh", "-c", "umask 077; exec python -m uvicorn app:app --host 0.0.0.0 --port 9170 --workers 1 --no-access-log"]
+    ports:
+      - "127.0.0.1:${OFFICE_APP_PORT:-9170}:9170"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - type: bind
+        source: ${OFFICE_RUNTIME_DIR:?Set an absolute OFFICE_RUNTIME_DIR}
+        target: /runtime
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${OFFICE_MODELS_DIR:?Set an absolute OFFICE_MODELS_DIR}
+        target: /models
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on: [qdrant]
+    networks: [database, streams]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${OFFICE_GPU_ID:-0}"]
+              capabilities: [gpu]
+
+  mediamtx:
+    image: bluenviron/mediamtx:1.15.3
+    profiles: [fixture]
+    restart: "no"
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+    ports:
+      - "127.0.0.1:${OFFICE_RTSP_PORT:-18555}:8554"
+    networks: [streams]
+
+  fixture-publisher:
+    image: ${OFFICE_IMAGE:-camex-office-demo:office-20261023}
+    platform: linux/amd64
+    profiles: [fixture]
+    restart: "no"
+    init: true
+    user: "${OFFICE_UID:-1000}:${OFFICE_GID:-1000}"
+    entrypoint: ["/bin/bash", "/app/office_demo/scripts/publish_fixture.sh"]
+    command: ["/fixture", "--rtsp-base", "rtsp://mediamtx:8554"]
+    volumes:
+      - type: bind
+        source: ${OFFICE_FIXTURE_DIR:?Set an absolute OFFICE_FIXTURE_DIR}
+        target: /fixture
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on: [mediamtx]
+    networks: [streams]
+
+networks:
+  database:
+    internal: true
+  streams: {}
+volumes:
+  qdrant-data: {}

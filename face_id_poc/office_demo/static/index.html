@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>CAMEX | Office Face ID</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/lucide.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand"><i data-lucide="scan-face" aria-hidden="true"></i><div><span class="eyebrow">CAMEX</span><h1>Office Face ID</h1></div></div>
+    <div class="runtime-summary"><span id="connection-state" class="status"><span class="status-dot"></span>Connecting</span><span id="provider-summary">Providers not reported</span></div>
+  </header>
+  <div class="privacy-banner"><i data-lucide="shield-check" aria-hidden="true"></i>Controlled local evaluation. Consenting participants only.</div>
+  <nav class="view-tabs" role="tablist" aria-label="Office evaluation">
+    <button id="tab-cameras" role="tab" aria-controls="view-cameras" aria-selected="true" tabindex="0" data-tab="cameras"><i data-lucide="camera" aria-hidden="true"></i>Cameras<span id="camera-count" class="count">0</span></button>
+    <button id="tab-people" role="tab" aria-controls="view-people" aria-selected="false" tabindex="-1" data-tab="people"><i data-lucide="users" aria-hidden="true"></i>People<span id="people-count" class="count">0</span></button>
+    <button id="tab-diagnostics" role="tab" aria-controls="view-diagnostics" aria-selected="false" tabindex="-1" data-tab="diagnostics"><i data-lucide="activity" aria-hidden="true"></i>Diagnostics</button>
+  </nav>
+  <main>
+    <div id="connection-error" class="notice error" role="status" hidden></div>
+    <section id="view-cameras" role="tabpanel" aria-labelledby="tab-cameras">
+      <div class="section-heading"><div><h2>Cameras</h2><p id="camera-summary" class="muted">Loading camera state...</p></div><div class="actions"><button id="start-all" disabled><i data-lucide="play" aria-hidden="true"></i>Start all</button><button id="stop-all" disabled><i data-lucide="square" aria-hidden="true"></i>Stop all</button><button id="add-camera" class="primary"><i data-lucide="plus" aria-hidden="true"></i>Add camera</button></div></div>
+      <div class="overlay-legend"><span><i class="head-swatch"></i>Head track</span><span><i class="face-swatch usable"></i>Usable face</span><span><i class="face-swatch rejected"></i>Detected face, quality check failed</span></div>
+      <div id="camera-grid" class="camera-grid" aria-label="Camera feeds"></div>
+      <div id="camera-empty" class="empty-state"><i data-lucide="loader-circle" aria-hidden="true"></i><h3>Loading cameras</h3></div>
+    </section>
+    <section id="view-people" role="tabpanel" aria-labelledby="tab-people" hidden>
+      <div class="section-heading"><div><h2>People</h2><p id="people-summary" class="muted">Loading enrollment state...</p></div><div class="actions"><div class="search-field"><i data-lucide="search" aria-hidden="true"></i><input id="people-search" type="search" placeholder="Search people" aria-label="Search people"></div><button id="add-person" class="primary"><i data-lucide="user-plus" aria-hidden="true"></i>Enroll images</button></div></div>
+      <div id="people-list" class="people-list"></div>
+      <div id="people-empty" class="empty-state"><i data-lucide="users" aria-hidden="true"></i><h3>Loading people</h3></div>
+    </section>
+    <section id="view-diagnostics" role="tabpanel" aria-labelledby="tab-diagnostics" hidden>
+      <div class="section-heading"><div><h2>Diagnostics</h2><p id="last-update" class="muted">Waiting for state</p></div><div class="actions"><button id="refresh-state" title="Refresh state"><i data-lucide="refresh-cw" aria-hidden="true"></i>Refresh</button><button id="download-report"><i data-lucide="download" aria-hidden="true"></i>Report JSON</button></div></div>
+      <div class="diagnostics-layout">
+        <section class="settings-section"><h3>Evaluation settings</h3>
+          <form id="settings-form">
+            <fieldset id="settings-fields" disabled>
+              <legend>Matching</legend>
+              <div class="field-pair"><label>Match threshold<input name="match_threshold" type="number" min="0" max="1" step="0.01" required></label><label>Match margin<input name="match_margin" type="number" min="0" max="0.5" step="0.01" required></label></div>
+            </fieldset>
+            <fieldset id="admission-fields" disabled><legend>Registered-only admission</legend><div class="field-pair"><label>Admission threshold<input name="admission_threshold" type="number" min="0" max="1" step="0.01" required></label><label>Admission margin<input name="admission_margin" type="number" min="0" max="0.5" step="0.01" required></label></div></fieldset>
+            <fieldset id="capture-fields" disabled><legend>Capture &amp; adaptation</legend>
+              <label>Adaptation mode<select name="adaptation_mode"><option value="off">Off</option><option value="review">Review</option><option value="auto">Auto</option></select></label>
+              <p id="auto-lock-reason" class="muted" hidden></p>
+              <label>Single-reference mode<select name="single_reference_mode"><option value="off" selected>Off</option><option value="review">One-photo reviewed bootstrap</option></select></label>
+              <p id="single-reference-warning" class="policy-warning" hidden>One reference: human approval required. Similarity is not proof of identity.</p>
+              <div class="field-pair"><label>Analysis FPS<input name="analysis_fps" type="number" min="1" max="30" step="0.1" required></label><label>Recognition Hz<input name="recognition_hz" type="number" min="0.2" max="5" step="0.1" required></label></div>
+              <label>Minimum face width (px)<input name="face_min_width" type="number" min="20" max="300" step="1" required></label>
+              <label for="quality-strictness">Recognition quality strictness</label>
+              <div class="field-pair"><input id="quality-strictness" type="range" min="0" max="100" step="1" aria-label="Recognition quality strictness"><input name="quality_strictness" type="number" min="0" max="100" step="1" aria-label="Quality strictness value" required></div>
+              <div class="form-footer"><span class="muted">Relaxed 0 / Strict 100</span></div>
+              <label>Face detection<select name="face_detection_mode"><option value="full_frame">Full frame</option><option value="head_detail">Full frame + head detail</option></select></label>
+            </fieldset>
+            <div id="settings-error" class="notice error" role="alert" hidden></div>
+            <div class="form-footer"><span id="settings-status" class="muted" role="status">Waiting for settings</span><div class="actions"><button id="settings-defaults" type="button" title="Restore all 11 Office Demo settings" disabled><i data-lucide="rotate-ccw" aria-hidden="true"></i>Reset all settings</button><button id="save-settings" class="primary" disabled><i data-lucide="check" aria-hidden="true"></i>Save settings</button></div></div>
+          </form>
+        </section>
+        <div class="diagnostic-readouts">
+          <section class="readout-section"><div class="section-heading compact"><h3>Hardware</h3><span id="hardware-scope" class="muted">Scope not reported</span></div><dl class="hardware-grid"><div><dt>CPU utilization</dt><dd id="hardware-cpu">Not reported</dd></div><div><dt>RAM used</dt><dd id="hardware-ram-used">Not reported</dd></div><div><dt>RAM available</dt><dd id="hardware-ram-available">Not reported</dd></div><div><dt>Process memory (RSS)</dt><dd id="hardware-process">Not reported</dd></div><div><dt>GPU utilization</dt><dd id="hardware-gpu-util">Not reported</dd></div><div><dt>GPU memory</dt><dd id="hardware-gpu-memory">Not reported</dd></div><div><dt>GPU temperature</dt><dd id="hardware-gpu-temperature">Not reported</dd></div></dl><p id="hardware-gpu" class="muted">GPU not reported</p></section>
+          <section class="readout-section"><div class="section-heading compact"><h3>Engine &amp; device providers</h3><span id="engine-ready" class="badge neutral">Not reported</span></div><dl id="engine-details" class="data-list"><dt>Providers</dt><dd>Not reported</dd></dl></section>
+          <section class="readout-section"><h3>Session metrics</h3><dl id="metrics-details" class="data-list"><dt>State</dt><dd>Not reported</dd></dl></section>
+          <section class="readout-section"><h3>Index</h3><dl id="index-details" class="data-list"><dt>State</dt><dd>Not reported</dd></dl></section>
+        </div>
+      </div>
+      <section class="review-section"><div class="section-heading"><div><h3>Adaptation review</h3><p id="candidate-count" class="muted">Not loaded</p></div><button id="refresh-candidates" class="icon-button" title="Refresh candidates" aria-label="Refresh candidates"><i data-lucide="refresh-cw" aria-hidden="true"></i></button></div><div id="candidate-error" class="notice error" role="status" hidden></div><div id="candidate-list" class="candidate-list"></div><div id="candidate-empty" class="inline-empty">Loading candidates...</div></section>
+    </section>
+  </main>
+
+  <dialog id="camera-dialog" aria-labelledby="camera-dialog-title">
+    <form id="camera-form">
+      <div class="dialog-header"><h2 id="camera-dialog-title">Add camera</h2><button type="button" class="icon-button" data-close="camera-dialog" title="Close" aria-label="Close"><i data-lucide="x" aria-hidden="true"></i></button></div>
+      <div class="dialog-body"><label for="camera-name">Camera name</label><input id="camera-name" name="name" maxlength="120" autocomplete="off" required>
+        <label for="camera-url">RTSP URL</label><input id="camera-url" name="url" type="password" autocomplete="new-password" spellcheck="false" placeholder="rtsp://host:554/stream" required>
+        <label class="checkbox"><input id="camera-authorized" type="checkbox" required><span>I am authorized to use this camera for this evaluation with consenting participants.</span></label>
+        <div id="camera-error" class="notice error" role="alert" hidden></div>
+      </div>
+      <div class="dialog-footer"><button type="button" data-close="camera-dialog">Cancel</button><button id="camera-submit" class="primary"><i data-lucide="plus" aria-hidden="true"></i>Add camera</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="enroll-dialog" class="wide-dialog" aria-labelledby="enroll-dialog-title">
+    <form id="enroll-form">
+      <div class="dialog-header"><h2 id="enroll-dialog-title">Enroll images</h2><button type="button" class="icon-button" data-close="enroll-dialog" title="Close" aria-label="Close"><i data-lucide="x" aria-hidden="true"></i></button></div>
+      <div class="dialog-body">
+        <fieldset class="mode-switch"><legend class="sr-only">Enrollment source</legend><label><input type="radio" name="enroll_mode" value="person" checked><span><i data-lucide="user-round" aria-hidden="true"></i>Person</span></label><label><input type="radio" name="enroll_mode" value="folder"><span><i data-lucide="folder-open" aria-hidden="true"></i>Folders</span></label><label><input type="radio" name="enroll_mode" value="zip"><span><i data-lucide="file-archive" aria-hidden="true"></i>ZIP</span></label></fieldset>
+        <div id="person-inputs"><label for="enroll-person">Person</label><select id="enroll-person"><option value="">New person</option></select><label for="enroll-name">Name</label><input id="enroll-name" maxlength="120" autocomplete="off"><label for="enroll-files">Images (JPG / PNG)</label><input id="enroll-files" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple><button id="open-webcam" type="button"><i data-lucide="camera" aria-hidden="true"></i>Capture photos</button></div>
+        <div id="folder-inputs" hidden><label for="enroll-folder">Image folders (JPG / PNG)</label><input id="enroll-folder" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" webkitdirectory multiple></div>
+        <div id="zip-inputs" hidden><label for="enroll-zip">ZIP archive</label><input id="enroll-zip" type="file" accept=".zip,application/zip,application/x-zip-compressed"></div>
+        <div class="selection-heading"><span id="selection-summary" class="muted">No images selected</span><button id="clear-selection" type="button" class="text-button" hidden>Clear selection</button></div>
+        <div id="selection-thumbnails" class="selection-thumbnails"></div>
+        <label class="checkbox"><input id="enroll-consent" type="checkbox"><span>I am authorized to upload and enroll these images. Every participant has consented to this local evaluation.</span></label>
+        <div id="enroll-error" class="notice error" role="alert" hidden></div>
+        <div id="enroll-progress" class="notice" role="status" hidden></div>
+        <section id="preview-section" class="preview-section" hidden><div class="section-heading compact"><h3>Enrollment preview</h3><span id="preview-summary" class="muted"></span></div><div id="preview-groups"></div></section>
+      </div>
+      <div class="dialog-footer"><button type="button" data-close="enroll-dialog">Cancel</button><button id="revise-enrollment" type="button" hidden><i data-lucide="rotate-ccw" aria-hidden="true"></i>Revise selection</button><button id="preview-enrollment" class="primary" disabled><i data-lucide="upload" aria-hidden="true"></i>Upload for preview</button><button id="commit-enrollment" type="button" class="primary" hidden disabled><i data-lucide="check" aria-hidden="true"></i>Commit enrollment</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="webcam-dialog" class="webcam-dialog" aria-labelledby="webcam-title">
+    <div class="dialog-header"><h2 id="webcam-title">Capture photos</h2><button class="icon-button" data-close="webcam-dialog" title="Close camera" aria-label="Close camera"><i data-lucide="x" aria-hidden="true"></i></button></div>
+    <div class="dialog-body"><div class="webcam-view"><video id="webcam-video" autoplay muted playsinline></video><span id="webcam-placeholder">Camera stopped</span></div><div class="capture-actions"><button id="webcam-start"><i data-lucide="video" aria-hidden="true"></i>Start camera</button><button id="webcam-snap" disabled><i data-lucide="camera" aria-hidden="true"></i>Take photo</button><span id="webcam-count" class="muted">0 / 5 photos</span></div><div id="webcam-error" class="notice error" role="alert" hidden></div><div id="webcam-photos" class="webcam-photos"></div></div>
+    <div class="dialog-footer"><button data-close="webcam-dialog">Cancel</button><button id="webcam-use" class="primary" disabled><i data-lucide="check" aria-hidden="true"></i>Use photos</button></div>
+  </dialog>
+
+  <dialog id="candidate-review-dialog" class="candidate-review-dialog" aria-labelledby="candidate-review-title">
+    <form id="candidate-review-form">
+      <div class="dialog-header"><h2 id="candidate-review-title">Review candidate</h2><button type="button" class="icon-button" data-close="candidate-review-dialog" title="Close review" aria-label="Close review"><i data-lucide="x" aria-hidden="true"></i></button></div>
+      <div class="dialog-body">
+        <div class="review-heading"><h3 id="candidate-review-name"></h3><span id="candidate-review-policy" class="muted"></span></div>
+        <p id="candidate-review-warning" class="policy-warning" hidden>One reference: human approval required. Similarity is not proof of identity.</p>
+        <div class="review-photos">
+          <figure><figcaption>Registered reference</figcaption><div class="review-photo-visual"><img id="candidate-review-reference" alt="Registered reference" hidden><span id="candidate-review-reference-status" role="status">Loading reference...</span></div></figure>
+          <figure><figcaption>Candidate crop</figcaption><div class="review-photo-visual"><img id="candidate-review-crop" alt="Candidate crop" hidden><span id="candidate-review-crop-status" role="status">Loading candidate...</span></div></figure>
+        </div>
+        <p id="candidate-review-quality" class="review-quality"></p>
+        <dl id="candidate-review-evidence" class="review-evidence"></dl>
+        <label class="checkbox"><input id="candidate-identity-verified" type="checkbox" required disabled><span id="candidate-identity-label"></span></label>
+        <div id="candidate-review-error" class="notice error" role="alert" hidden></div>
+      </div>
+      <div class="dialog-footer"><button type="button" data-close="candidate-review-dialog" autofocus>Cancel</button><button id="candidate-review-confirm" type="submit" class="primary" disabled><i data-lucide="check" aria-hidden="true"></i>Confirm approval</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog" class="small-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message"><form method="dialog"><div class="dialog-header"><h2 id="confirm-title">Confirm deletion</h2></div><div class="dialog-body"><p id="confirm-message"></p></div><div class="dialog-footer"><button value="cancel" autofocus>Cancel</button><button id="confirm-action" value="confirm" class="danger-button">Delete</button></div></form></dialog>
+  <dialog id="photo-dialog" class="photo-dialog" aria-labelledby="photo-title"><div class="dialog-header"><h2 id="photo-title">Photo</h2><button class="icon-button" data-close="photo-dialog" title="Close" aria-label="Close"><i data-lucide="x" aria-hidden="true"></i></button></div><div class="dialog-body"><img id="photo-large" alt="Selected evaluation image"><p id="photo-details" class="muted"></p></div></dialog>
+  <div id="toast" role="status" hidden></div>
+  <noscript><div class="notice error">JavaScript is required for this local evaluation UI.</div></noscript>
+</body>
+</html>

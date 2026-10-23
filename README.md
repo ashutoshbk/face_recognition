@@ -1,5 +1,22 @@
 # Office Face Recognition (InsightFace)
 
+## Office GPU and Multi-Camera Update - 23 October 2026
+
+For normal **SCRFD-2.5G** office delivery, start with the
+**[Ubuntu/NVIDIA runbook](face_id_poc/office_demo/README.md)**: clean sparse clone,
+verified three-model setup, Docker/CUDA checks, single/bulk enrollment, five
+registered plus five approved live references, multiple RTSP cameras, an explicitly
+labelled Office Demo preset, and backup/troubleshooting. The latest release adds
+recent-recognition cards with camera snapshots and Reset all settings; see the
+[upgrade checklist](face_id_poc/office_demo/RELEASE_20261023.md). No research bootstrap, DigiFace download
+or 10G installation is required. This update adds no private photos, camera URLs,
+videos or runtime databases. Use the documented sparse checkout to avoid
+unrelated legacy assets elsewhere in the repository.
+
+The sections below describe the original standalone script. The earlier
+[research demo](face_id_poc/research_demo/README.md) and its instructions are
+retained separately; do not mix the three installation paths.
+
 A simple Python script that recognizes known people in a video by comparing detected faces
 against a folder of reference (staff) photos, using InsightFace face embeddings.
 
@@ -82,3 +99,10 @@ pip install opencv-python numpy insightface onnxruntime-gpu
   falls back to CPU if GPU init fails.
 - Recognition accuracy depends heavily on reference photo quality — use frontal,
   well-lit, unobstructed faces.
+
+## Standalone Face ID and Head Tracking PoC
+
+The independent [face_id_poc](face_id_poc/) folder provides enrollment, head
+tracking, multi-frame face identification, an optional demo renderer, and a
+frame-in/results-out integration API. Start with its README for setup and testing.
+It does not replace the original `main.py` application.

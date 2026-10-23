@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "camex-faceid"
+version = "0.1.1"
+description = "Single-camera head tracking and quality-gated face identification preview"
+requires-python = ">=3.10"
+dependencies = ["numpy==1.26.4", "scipy==1.13.1", "opencv-python-headless==4.10.0.84", "scikit-image==0.24.0", "onnx==1.16.1", "lap==0.5.12", "cython-bbox==0.1.5", "Pillow==10.4.0", "psutil==6.0.0"]
+
+[project.scripts]
+camex-faceid = "camex_faceid.cli:main"
+
+[project.optional-dependencies]
+gpu = ["onnxruntime-gpu==1.18.0"]
+cpu = ["onnxruntime==1.18.0"]
+test = ["pytest==8.3.3"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"camex_faceid.vendor" = ["*.txt"]
+"camex_faceid.vendor.bytetrack" = ["*.txt", "*.md", "LICENSE"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
