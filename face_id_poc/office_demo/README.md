@@ -1179,6 +1179,9 @@ Uncertain matches must be reviewed, not treated as a verified security finding.
    people. Tracks are not linked between cameras.
    Crops retain surrounding native pixels so the normal enrollment detector can
    inspect them again; no upscaling is used to bypass the quality gate.
+   If a small upload yields no face on the first pass, enrollment retries the
+   same detector with two bounded black-padding sizes. Coordinates and quality
+   checks still use the original image; multiple faces remain a rejection.
 3. Inspect a crop, delete the record, or choose **Enroll photos**. This opens the
    normal enrollment dialog with those images selected. Enter/select the person,
    explicitly confirm consent, review quality results, then commit enrollment.
@@ -1237,10 +1240,15 @@ environment. Tests cover opt-in, strict quality, five-best selection, duplicates
 retention, quotas, flag consent, cooldown, stale jobs, normal manual enrollment,
 reset persistence, data separation and a nonblocking save queue.
 
-The optional-feature walkthrough uses a **clearly labelled consented-photo
-replay** for deterministic positive cases; it is not a live-site accuracy test.
-Separate synchronized-office RTSP checks verify the existing capture/tracking
-path. Do not interpret a staged photo replay as liveness or false-match validation.
+The initial walkthrough used a **clearly labelled consented-photo replay**.
+The follow-up office-video test uses the three recorded 09:16-09:21 RTSP replays
+and native video crops. One consenting participant is deliberately withheld
+from an isolated gallery to demonstrate unknown capture and manual enrollment.
+Matching that participant after enrollment from the same recording is a
+functional workflow check, not independent accuracy or liveness validation.
+Keep the original gallery and recorded clips unchanged. A review notice is only
+demonstrated if its stricter evidence gate actually passes; do not lower that
+gate merely to produce an alert for the video.
 No additional network/model bundle is needed for this update.
 See [optional-review validation](OPTIONAL_REVIEW_VALIDATION.md) for the exact
 Mac, Ubuntu/CUDA and staged walkthrough checks and their limitations.

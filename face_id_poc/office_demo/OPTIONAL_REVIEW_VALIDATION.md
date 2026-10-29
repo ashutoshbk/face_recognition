@@ -66,3 +66,42 @@ be used as calibrated production thresholds.
 Real office false-match/false-notice rates, prolonged storage/retention testing,
 production authentication/encryption and consequential-decision suitability are
 not established. Keep the functionality limited to the agreed consented test.
+
+## Follow-up: real office-video workflow
+
+The three existing 2560x1440 office recordings (09:16-09:21) were replayed
+together through RTSP on the local Ubuntu GPU host. These are recorded video,
+not a connection to the live office cameras. The original gallery and clips
+were preserved; the client's server was not accessed.
+
+- The unmodified 20-person / 23-reference gallery completed a 310-second
+  full-frame smoke run at approximately 3 analysis FPS per camera. There were
+  364 face detections and 68 recognition queries. Counts are repeated frame
+  observations, not unique people or accuracy scores. No strict review notice
+  passed in this baseline.
+- To exercise unknown collection, one consenting participant was deliberately withheld from an
+  isolated gallery. The existing head-detail option was enabled, without a
+  new model or lower storage checks. One track accumulated five retained
+  native video crops, 86-88 pixels wide, quality scores 75.3-78.3.
+- This exposed a real enrollment defect: small saved crops could yield zero
+  detections after the ordinary detector resize. Enrollment now retries
+  zero-face small uploads using two bounded black-padding sizes. Coordinates,
+  pixel measurements, detector confidence, single-face checks and reference
+  quality checks are unchanged. It does not retry a detected multi-face upload.
+- After the correction, four of those five actual video crops passed normal
+  enrollment; one remained rejected. On the continued replay, recognition
+  and a review notice succeeded (similarity 0.846, margin 0.672, three fresh
+  observations). The operator acknowledged that notice through the UI.
+- This is **same-recording enrollment and replay matching**, so it establishes
+  the functional workflow only. It does not establish independent recognition
+  accuracy, liveness or deployment false-alert rates.
+- **162 Python tests passed**, including supplied-model CPU execution, and
+  **27 JavaScript tests passed**. The added regression checks cover native-size
+  coordinates, padding boundaries, invalid landmarks and large-image behavior.
+  The deployed GPU source hash matches the reviewed source.
+
+The replacement walkthrough is 58 seconds, silent, and shows actual office-video
+inputs, stored video crops, manual enrollment and the fresh-observation notice.
+The earlier still-photo walkthrough is retained separately, not substituted for
+this video test. Capture was limited to 3 analysis FPS under shared-host load;
+this follow-up is not a camera-capacity benchmark.

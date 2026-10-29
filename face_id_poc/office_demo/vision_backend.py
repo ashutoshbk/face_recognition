@@ -85,6 +85,32 @@ def face_crop(frame, face):
                  max(0, int(x-pad)):min(frame.shape[1], int(x+w+pad))].copy()
 
 
+def padded_enrollment_faces(frame, detector):
+    """Retry small uploads at two scales without inventing native face pixels."""
+    height, width = frame.shape[:2]
+    longest = max(height, width)
+    if longest >= 640:
+        return []
+    faces = []
+    sides = sorted({min(640, max(256, int(np.ceil(longest*scale/64))*64))
+                    for scale in (1.3, 1.6)})
+    for side in sides:
+        padded = np.zeros((side, side, 3), dtype=frame.dtype)
+        padded[:height, :width] = frame
+        boxes, landmarks = detector.detect(padded, input_size=(640, 640))
+        if landmarks is None:
+            continue
+        for box, points in zip(boxes, landmarks):
+            if (not np.isfinite(box).all() or not np.isfinite(points).all()
+                    or box[0] < 0 or box[1] < 0 or box[2] > width or box[3] > height
+                    or box[2] <= box[0] or box[3] <= box[1]
+                    or (points < 0).any() or (points[:, 0] > width).any()
+                    or (points[:, 1] > height).any()):
+                continue
+            faces.append(np.r_[box[:2], box[2:4]-box[:2], points.reshape(-1), box[4]].astype(np.float32))
+    return faces
+
+
 def head_detail_regions(heads, faces, shape, cursor=0, limit=4):
     """Bounded native-pixel crops; never alter the reported native face size."""
     height, width = shape[:2]
@@ -208,6 +234,10 @@ class Vision:
                     points = points + np.array([x1, y1])
                     faces.append(np.r_[xy[:2], xy[2:]-xy[:2], points.reshape(-1), box[4]].astype(np.float32))
             run_roi(rois[0])
+            # Small native video crops can fail when stretched to fill 640px.
+            # Only retry zero-face uploads; normal multi-face rejection stays intact.
+            if enrollment and not faces:
+                faces.extend(padded_enrollment_faces(frame, detector))
             if detail and not enrollment:
                 cursor = getattr(self.local, "detail_cursor", 0)
                 regions = head_detail_regions(heads, faces, frame.shape, cursor=cursor, limit=1)
