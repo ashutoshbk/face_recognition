@@ -15,6 +15,11 @@ this entry point. Shared research Python modules are source dependencies only;
 there is no DigiFace download, synthetic-gallery build, research-service startup,
 or 10G model installation in this runbook.
 
+The optional-review update adds **Unknown faces** and **Review notices**, disabled
+by default. These are for the controlled, consented office test only. They do not
+create an automated security decision or a general CCTV watchlist. See
+[Optional Review Tools](#17-optional-review-tools).
+
 The **23 October update** adds stable recent-recognition cards with observed
 camera snapshots and an all-settings reset. See the
 [release and upgrade checklist](RELEASE_20261023.md) before updating an existing
@@ -40,6 +45,7 @@ installation. Existing saved settings, cameras and people are retained.
 - [14. Tests and CPU Development](#14-tests-and-cpu-development)
 - [15. Troubleshooting](#15-troubleshooting)
 - [16. Optional Separate Research and Validation Limits](#16-optional-separate-research-and-validation-limits)
+- [17. Optional Review Tools](#17-optional-review-tools)
 
 ## Scope, Rights and Safety
 
@@ -229,7 +235,7 @@ Repository authorization is required. On a new machine:
 
 ```bash
 git clone --filter=blob:none --sparse \
-  --branch codex/office-face-enrollment-multicam \
+  --branch codex/office-optional-review \
   https://github.com/ashutoshbk/face_recognition.git
 cd face_recognition
 git sparse-checkout set \
@@ -256,8 +262,8 @@ then fetch/switch/fast-forward only when appropriate:
 ```bash
 git status --short
 git fetch origin
-git switch codex/office-face-enrollment-multicam
-git merge --ff-only origin/codex/office-face-enrollment-multicam
+git switch codex/office-optional-review
+git merge --ff-only origin/codex/office-optional-review
 ```
 
 If Git refuses, stop and reconcile the changes; do not reset or discard them.
@@ -273,7 +279,7 @@ Run as the operator who will own the private data. For a new normal installation
 ```bash
 umask 077
 export OFFICE_PROJECT_NAME=camex-office-demo
-export OFFICE_IMAGE=camex-office-demo:office-20261023
+export OFFICE_IMAGE=camex-office-demo:office-20261029
 export OFFICE_RUNTIME_DIR="$HOME/camex-office-runtime"
 export OFFICE_MODELS_DIR="$HOME/camex-office-models"
 export OFFICE_FIXTURE_DIR="$HOME/camex-office-fixture"
@@ -656,7 +662,7 @@ It changes query eligibility, not the identity similarity threshold or the
 quality score. The face-width control can go down to **20 px for diagnostic
 query testing only**. Choose **Save settings** after changes. **Reset all settings**
 fetches the complete preset from `GET /api/settings/defaults`, asks for confirmation,
-and restores all 11 controls in one validated settings update. The result is
+and restores all 19 controls, including disabled optional-review features, in one validated settings update. The result is
 saved to `config/settings.json`; no additional Save click is needed. Cameras,
 people and registered/live photos are not deleted. Upgrades do not overwrite
 existing saved settings; use Reset explicitly to adopt this preset.
@@ -1129,3 +1135,120 @@ identity accuracy, a calibrated operating threshold, production readiness or
 another GPU's sustained capacity. Report fresh Ubuntu validation separately,
 including the actual source version, default/test settings, three-stream input
 scope and any failures.
+
+## 17. Optional Review Tools
+
+These additions are limited to a **controlled local session with consenting
+participants**. Both are disabled on a fresh installation. They neither create
+a general CCTV watchlist nor trigger access denial, employee action or external
+notifications. The existing loopback-only API still has no production user-login
+or role-based access-control layer; restrict access to the authorized operator.
+
+### Enable and configure
+
+In **Diagnostics > Optional local review**, confirm the controlled/consented
+session, select **Save unknown faces** and/or **Flagged-person review notices**,
+then **Save settings**. Without that confirmation the API rejects enabling them.
+
+| Setting | Default / limits |
+| --- | --- |
+| Unknown-face collection | Off |
+| Flagged-person review notices | Off |
+| Consented-session confirmation | Off |
+| Retention | 24 hours; adjustable 1-168 hours |
+| Unknown-track records | 500 maximum; adjustable 1-500 |
+| Photos per unknown track | Five best quality, not five latest |
+| Combined stored review photos | Hard cap 250 MB; oldest records evicted |
+| Notice threshold / other-person margin | 0.68 / 0.10; cannot be lowered below these floors |
+| Notice cooldown | 60 seconds; adjustable 10-3600 seconds |
+
+These gates are not calibrated probabilities. Notices also honor the stricter
+registered-reference admission threshold/margin. With just one registered photo,
+the gate is at least 0.75 similarity / 0.15 margin and five distinct fresh frame
+observations spanning at least three seconds. With multiple registered photos,
+registered-only consensus and at least three fresh observations are required.
+Uncertain matches must be reviewed, not treated as a verified security finding.
+
+### Unknown faces
+
+1. Start an authorized camera. Collection requires repeated fresh unmatched
+   observations, strict storage quality and a native face width of at least
+   70 pixels. A relaxed 20-pixel query setting does not relax storage quality.
+2. Open **Unknown faces**. Each record is one camera track, with its first/last
+   time, expiry and up to five quality-ranked crops. It is not a count of unique
+   people. Tracks are not linked between cameras.
+   Crops retain surrounding native pixels so the normal enrollment detector can
+   inspect them again; no upscaling is used to bypass the quality gate.
+   If a small upload yields no face on the first pass, enrollment retries the
+   same detector with two bounded black-padding sizes. Coordinates and quality
+   checks still use the original image; multiple faces remain a rejection.
+3. Inspect a crop, delete the record, or choose **Enroll photos**. This opens the
+   normal enrollment dialog with those images selected. Enter/select the person,
+   explicitly confirm consent, review quality results, then commit enrollment.
+4. Unknowns are never embedded into the searchable Qdrant collection or
+   automatically added as trusted/live references. Turning away, a missing face,
+   an ambiguous association or a quality-rejected query does not create a record.
+
+### Flagged-person review (requested "blacklist" addition)
+
+1. In **People**, use **Flag for review** for an enrolled, consenting test
+   participant. Enter a reason, choose expiry, confirm that participant's consent
+   to the test, and save. A person without registered references cannot be flagged.
+2. Enable **Flagged-person review notices** in Diagnostics if not already on.
+   Creating a flag alone does not enable monitoring.
+3. After sufficiently strong fresh registered-reference matches, open **Review
+   notices**. Compare the observed crop to the registered reference; inspect
+   camera/time, reason, similarity, margin and observation count.
+4. **Mark reviewed** records the operator review only. It does not confirm
+   identity or execute an external action. Use **Remove flag** in People to stop
+   future notices for that participant. One active track generates at most one
+   notice, with a per-person/per-camera cooldown across tracks.
+
+A carried head-track name is display continuity, not fresh face evidence, and
+cannot generate another notice. Expired/removed flags cannot create new notices.
+Previously recorded notices remain history until retention or manual deletion.
+Deleting a person removes their flag and associated review notices.
+
+### Persistence and disabling
+
+The new data is separate: `/runtime/review/review.sqlite3` plus private JPEGs in
+`/runtime/review/images`. No embeddings are stored in this database. Settings
+remain in the existing `/runtime/config/settings.json`. No existing gallery
+schema changes or enrollment migration are required. Back up the private runtime
+before upgrading; never commit its files or backups to Git.
+
+Disabling a feature immediately invalidates queued work and stops new collection
+or notices; it does not silently delete prior records. The background worker
+continues retention cleanup while the app runs, including when model startup
+fails. Expired images are inaccessible through the API. On restart, overdue
+records are cleaned before use. Files remain on disk while the service is stopped,
+so an operator must account for downtime in any retention policy.
+
+**Reset all settings** restores all 19 settings, disables both optional features
+and clears the consent confirmation. It preserves people, camera configuration,
+and existing review records subject to retention. To remove a record immediately,
+use its delete control. Deletion is not enrollment and cannot be undone in the UI.
+Shortening retention applies to existing records too; increasing it never revives
+expired data or extends an existing record's deadline. Enrolling selected unknown
+crops does not silently merge or delete the historical unknown record.
+
+### Verification and handoff
+
+Run `pytest office_demo/tests -q` and
+`node --test office_demo/tests/*.test.cjs` from `face_id_poc` in the test
+environment. Tests cover opt-in, strict quality, five-best selection, duplicates,
+retention, quotas, flag consent, cooldown, stale jobs, normal manual enrollment,
+reset persistence, data separation and a nonblocking save queue.
+
+The initial walkthrough used a **clearly labelled consented-photo replay**.
+The follow-up office-video test uses the three recorded 09:16-09:21 RTSP replays
+and native video crops. One consenting participant is deliberately withheld
+from an isolated gallery to demonstrate unknown capture and manual enrollment.
+Matching that participant after enrollment from the same recording is a
+functional workflow check, not independent accuracy or liveness validation.
+Keep the original gallery and recorded clips unchanged. A review notice is only
+demonstrated if its stricter evidence gate actually passes; do not lower that
+gate merely to produce an alert for the video.
+No additional network/model bundle is needed for this update.
+See [optional-review validation](OPTIONAL_REVIEW_VALIDATION.md) for the exact
+Mac, Ubuntu/CUDA and staged walkthrough checks and their limitations.

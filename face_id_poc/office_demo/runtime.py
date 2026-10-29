@@ -17,16 +17,18 @@ from urllib.parse import urlsplit
 import cv2
 import numpy as np
 
-from domain import HeadTrackIdentity, SingleReferenceReview, best_quality_crops, write_json
+from domain import HeadTrackIdentity, SingleReferenceReview, best_quality_crops, registered_gate, write_json
+from optional_review import REVIEW_DEFAULTS, REVIEW_BOOLS, REVIEW_RANGES, ReviewService, validate_review_settings
 from vision_backend import Vision, HeadTracker, associate_faces, encode_jpeg, assess_query_quality
 
 
-SETTINGS_PROFILE = "office-demo-20261023"
+SETTINGS_PROFILE = "office-demo-20261029"
 # Reproduce the office evaluation, not a production-calibrated operating point.
 DEFAULTS = dict(match_threshold=.30, match_margin=.06, admission_threshold=.68,
                 admission_margin=.10, adaptation_mode="review", analysis_fps=10.,
                 recognition_hz=1., face_min_width=20, quality_strictness=49, single_reference_mode="review",
                 face_detection_mode="full_frame")
+DEFAULTS.update(REVIEW_DEFAULTS)
 
 
 @lru_cache(maxsize=1)
@@ -222,6 +224,7 @@ class Camera:
 class Manager:
     def __init__(self, root, models, provider, gallery):
         self.root, self.models, self.provider = Path(root), Path(models), provider
+        (self.root / "config").mkdir(parents=True, exist_ok=True, mode=0o700)
         self.gallery = gallery
         self.settings = dict(DEFAULTS)
         self.cameras = OrderedDict()
@@ -251,8 +254,30 @@ class Manager:
             self.settings.update(json.loads(settings_path.read_text()))
         if self.settings.get("adaptation_mode") == "auto" and os.environ.get("CAMEX_OFFICE_ALLOW_AUTO_ADMISSION") != "1":
             self.settings["adaptation_mode"] = "review"
+        for key in REVIEW_BOOLS:
+            if not isinstance(self.settings.get(key), bool):
+                self.settings[key] = REVIEW_DEFAULTS[key]
+        for key, (minimum, maximum) in REVIEW_RANGES.items():
+            value = self.settings.get(key)
+            if (isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not minimum <= value <= maximum
+                    or key == "unknown_max_records" and value != int(value)):
+                self.settings[key] = REVIEW_DEFAULTS[key]
+        if not self.settings["review_consent"]:
+            self.settings["unknown_capture_enabled"] = False
+            self.settings["flagged_review_enabled"] = False
+        self.review = ReviewService(self.root, self.gallery, self.settings, self._review_current)
+
+    def _review_current(self, item):
+        camera = self.cameras.get(item.get("camera_id"))
+        if camera is None or camera.generation != item.get("camera_generation") or item.get("identity_epoch") != self.epoch:
+            return False
+        track = camera.tracks.get(item.get("track_id"))
+        return bool(track and track.get("token") == item.get("track_token") and track.get("tracking_state") == "observed"
+                    and track.get("face_visible"))
 
     def start(self):
+        self.review.start()
         self.threads = [threading.Thread(target=self._load, daemon=True, name="model-loader")]
         self.threads[0].start()
 
@@ -302,6 +327,7 @@ class Manager:
 
     def _reset_evidence(self):
         self.epoch += 1
+        self.review.configure(self.settings)
         with self.pending_lock:
             self.pending.clear()
         with self.candidate_lock:
@@ -320,12 +346,25 @@ class Manager:
                                  last_face_match_age_seconds=None, token=uuid.uuid4().hex)
 
     def update_settings(self, changes):
+        if not isinstance(changes, dict):
+            raise ValueError("Settings must be a JSON object")
         ranges = dict(match_threshold=(0, 1), match_margin=(0, .5), admission_threshold=(0, 1),
             admission_margin=(0, .5), analysis_fps=(1, 30), recognition_hz=(.2, 5), face_min_width=(20, 300),
             quality_strictness=(0, 100))
         proposed = dict(self.settings)
         for key, value in changes.items():
-            if key == "face_detection_mode":
+            if key in REVIEW_BOOLS:
+                if not isinstance(value, bool):
+                    raise ValueError("Review toggles require true or false")
+            elif key in REVIEW_RANGES:
+                if isinstance(value, bool):
+                    raise ValueError("Review numeric settings require a number")
+                value = float(value)
+                if not REVIEW_RANGES[key][0] <= value <= REVIEW_RANGES[key][1]:
+                    raise ValueError("Setting outside allowed range: " + key)
+                if key == "unknown_max_records" and value != int(value):
+                    raise ValueError("Unknown record limit must be a whole number")
+            elif key == "face_detection_mode":
                 if value not in ("full_frame", "head_detail"):
                     raise ValueError("Face detection mode must be full_frame or head_detail")
             elif key == "single_reference_mode":
@@ -343,12 +382,13 @@ class Manager:
             else:
                 raise ValueError("Unknown setting: " + key)
             proposed[key] = value
+        validate_review_settings(proposed)
         if proposed["admission_threshold"] < proposed["match_threshold"] or proposed["admission_margin"] < proposed["match_margin"]:
             raise ValueError("Admission must be at least as strict as recognition")
         with self.admission_lock:
+            write_json(self.root / "config" / "settings.json", proposed)
             self.settings = proposed
             self.reset_evidence()
-            write_json(self.root / "config" / "settings.json", self.settings)
         return self.settings
 
     def _tracking_loop(self):
@@ -447,6 +487,13 @@ class Manager:
                                     job = dict(camera=camera, track_id=key, generation=generation, epoch=self.epoch,
                                         track_token=t["token"], sequence=seq, captured=captured,
                                         aligned=aligned, crop=crop, quality=quality, reference_quality=reference_quality)
+                                    if self.settings["unknown_capture_enabled"]:
+                                        # Keep native surrounding pixels so a saved unknown can
+                                        # pass the normal detector again during explicit enrollment.
+                                        x, y, w, h = face[:4]
+                                        pad = .45*max(w,h)
+                                        job["review_crop"] = frame[max(0,int(y-pad)):min(frame.shape[0],int(y+h+pad)),
+                                            max(0,int(x-pad)):min(frame.shape[1],int(x+w+pad))].copy()
                                     with self.pending_lock:
                                         self.pending[(camera.id, key)] = job
                                         while len(self.pending) > 128:
@@ -587,6 +634,7 @@ class Manager:
                             self.samples.popitem(last=False)
                     track["samples"] = selected
                     track["samples_seen"] += 1
+                    self._review_observation(job, result, ranked, jpeg, track)
                     proposal = track["single_review"].observe(ranked, result["person_id"], job["reference_quality"],
                         job["captured"], job["sequence"], digest) if self.settings["single_reference_mode"] == "review" else None
                 if proposal and result["state"] == "Confirmed" and self.settings["adaptation_mode"] != "off":
@@ -603,6 +651,34 @@ class Manager:
                         t["evidence"].clear()
                         t.update(name=None, state="Recognition unavailable", token=uuid.uuid4().hex, votes=0, observations=0)
                 self.engine_error = str(error)[:180]
+
+    def _review_observation(self, job, result, ranked, jpeg, track):
+        if not self.settings["review_consent"] or not track.get("face_visible"):
+            return
+        person_id = result.get("person_id")
+        target = next((p for p in ranked if p["person_id"] == person_id), None)
+        threshold = max(self.settings["review_match_threshold"], self.settings["admission_threshold"])
+        margin = max(self.settings["review_match_margin"], self.settings["admission_margin"])
+        strict = False
+        score, gap = 0., 0.
+        if target and ranked and ranked[0]["person_id"] == person_id and result.get("state") == "Confirmed":
+            score = target["registered_score"]
+            rival = max((p["registered_score"] for p in ranked if p["person_id"] != person_id), default=-1.)
+            gap = score-rival
+            if len(target["registered"]) == 1:
+                strict = score >= max(.75, threshold) and gap >= max(.15, margin)
+            else:
+                strict = registered_gate(ranked, person_id, threshold, margin)[0]
+        unknown = (not person_id and not track.get("name") and result.get("state") == "Unknown"
+                   and (not ranked or ranked[0]["score"] < self.settings["match_threshold"]))
+        if unknown and job.get("review_crop") is not None:
+            jpeg = encode_jpeg(job["review_crop"])
+        source = f'{job["camera"].id}:{job["generation"]}:{job["track_token"]}'
+        self.review.submit(dict(source_key=hashlib.sha256(source.encode()).hexdigest(),
+            camera_id=job["camera"].id, camera_name=job["camera"].name, track_id=job["track_id"],
+            camera_generation=job["generation"], identity_epoch=job["epoch"], track_token=job["track_token"],
+            captured=job["captured"], sequence=job["sequence"], image=jpeg, quality=dict(job["reference_quality"]),
+            unknown=unknown, person_id=person_id, strict_match=strict, score=score, margin=gap))
 
     def _renew_samples(self, samples, now):
         with self.samples_lock:
@@ -702,7 +778,7 @@ class Manager:
 
     def state(self):
         return dict(people=self.gallery.people(), cameras=[c.public() for c in list(self.cameras.values())],
-            settings=self.settings, index=dict(ready=self.gallery.healthy, error=self.gallery.error,
+            settings=self.settings, review=self.review.snapshot(), index=dict(ready=self.gallery.healthy, error=self.gallery.error,
             reference_count=len(self.gallery.references()), pending_file_cleanup=self.gallery.pending_cleanup_count()), engine=dict(self.vision.status(), ready=self.workers_ready) if self.vision else
             dict(ready=False, error=self.engine_error or "Loading models"),
             metrics=dict(uptime_seconds=round(time.time()-self.started), pending_recognition=len(self.pending),
@@ -752,3 +828,4 @@ class Manager:
             camera.stop()
         for thread in self.threads:
             thread.join(timeout=3)
+        self.review.close()

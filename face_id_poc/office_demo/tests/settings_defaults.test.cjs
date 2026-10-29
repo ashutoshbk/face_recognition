@@ -10,7 +10,9 @@ const end = source.indexOf("  $('settings-form').addEventListener('submit'", sta
 assert(start >= 0 && end > start);
 const defaults = {match_threshold:.30, match_margin:.06, admission_threshold:.68,
   admission_margin:.10, adaptation_mode:'review', analysis_fps:10, recognition_hz:1,
-  face_min_width:20, quality_strictness:49, single_reference_mode:'review', face_detection_mode:'full_frame'};
+  face_min_width:20, quality_strictness:49, single_reference_mode:'review', face_detection_mode:'full_frame',
+  unknown_capture_enabled:false, flagged_review_enabled:false, review_consent:false, unknown_retention_hours:24,
+  unknown_max_records:500, review_notice_cooldown:60, review_match_threshold:.68, review_match_margin:.10};
 
 async function run({confirmed=true, preset=defaults, connected=true, reject=false} = {}) {
   let click;
@@ -35,7 +37,7 @@ async function run({confirmed=true, preset=defaults, connected=true, reject=fals
   return {calls,notices,toasts,dirty,context};
 }
 
-test('Reset posts all eleven defaults fetched from the backend', async()=>{
+test('Reset posts all nineteen defaults including disabled optional features', async()=>{
   const result=await run();
   const posts=result.calls.filter(c=>c.options);
   assert.equal(posts.length,1);
@@ -49,7 +51,7 @@ test('Reset posts all eleven defaults fetched from the backend', async()=>{
 test('Cancel preserves unsaved fields and does not post', async()=>{
   const result=await run({confirmed:false});
   assert.equal(result.calls.filter(c=>c.options).length,0);
-  assert.equal(result.dirty.size,11);
+  assert.equal(result.dirty.size,19);
   assert.equal(result.context.savingSettings,false);
 });
 
@@ -57,7 +59,7 @@ test('Incomplete preset or failed save cannot claim a successful reset', async()
   for(const options of [{preset:{face_min_width:20}},{reject:true}]) {
     const result=await run(options);
     assert.equal(result.toasts.length,0);
-    assert.equal(result.dirty.size,11);
+    assert.equal(result.dirty.size,19);
     assert.ok(result.notices.some(c=>c[1]));
     assert.equal(result.context.savingSettings,false);
   }

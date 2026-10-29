@@ -295,3 +295,20 @@ dialog.candidate-review-dialog { width: min(740px, calc(100% - 32px)); }
   .person-heading { gap: 8px; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+.review-records { display: grid; gap: 16px; }
+.review-record { border-top: 1px solid var(--border, #d4dddd); padding: 16px 0; }
+.review-record h3 { overflow-wrap: anywhere; }
+.review-photo-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: start; }
+.review-photo { padding: 0; width: 130px; display: flex; flex-direction: column; overflow: hidden; }
+.review-photo img { width: 128px; height: 128px; object-fit: contain; background: #edf1f2; }
+.review-photo span { padding: 5px; font-size: 11px; white-space: normal; }
+.review-pagination { display: flex; gap: 14px; align-items: center; padding: 16px 0; }
+.notice-evidence { display: grid; grid-template-columns: 160px 1fr; gap: 20px; }
+.notice-evidence figure { margin: 0; }
+.notice-evidence figcaption { margin-bottom: 8px; font-size: 12px; }
+.notice-evidence figure > img { width: 130px; height: 130px; object-fit: contain; background: #edf1f2; }
+.review-flag { background: #fff2d7; color: #7a5012; font-size: 11px; }
+.view-tabs { flex-wrap: wrap; }
+#flag-form label { display: grid; gap: 6px; margin: 12px 0; }
+#flag-form label.checkbox { display: flex; }
+@media (max-width: 600px) { .notice-evidence { grid-template-columns: 1fr; } .review-photo { width: 110px; } .review-photo img { width:108px; height:108px; } }

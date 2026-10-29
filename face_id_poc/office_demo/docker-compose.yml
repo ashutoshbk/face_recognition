@@ -11,7 +11,7 @@ services:
     networks: [database]
 
   app:
-    image: ${OFFICE_IMAGE:-camex-office-demo:office-20261023}
+    image: ${OFFICE_IMAGE:-camex-office-demo:office-20261029}
     platform: linux/amd64
     restart: "no"
     init: true
@@ -65,7 +65,7 @@ services:
     networks: [streams]
 
   fixture-publisher:
-    image: ${OFFICE_IMAGE:-camex-office-demo:office-20261023}
+    image: ${OFFICE_IMAGE:-camex-office-demo:office-20261029}
     platform: linux/amd64
     profiles: [fixture]
     restart: "no"
