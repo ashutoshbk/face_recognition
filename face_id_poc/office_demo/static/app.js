@@ -520,7 +520,8 @@
   function renderPeople(force = false) {
     const people = list(app.data?.people);
     const search = $('people-search').value.trim().toLocaleLowerCase();
-    const key = JSON.stringify([people, search, [...app.busy]]);
+    const flags = list(app.data?.review?.flags);
+    const key = JSON.stringify([people, flags, search, [...app.busy]]);
     if (!force && key === app.peopleKey) return;
     app.peopleKey = key;
     $('people-count').textContent = people.length;
@@ -529,6 +530,23 @@
     $('people-list').innerHTML = visible.map((person) => '<article class="person-section" data-person="' + esc(person.id) + '"><div class="person-heading"><div><h3>' + esc(person.name || 'Unnamed person') + '</h3></div><div class="actions"><button data-action="person-enroll" title="Add registered photos"><i data-lucide="image-plus"></i>Add photos</button><button class="icon-button danger" data-action="person-delete" title="Delete person" aria-label="Delete ' + esc(person.name || 'person') + '"><i data-lucide="trash-2"></i></button></div></div><div class="person-banks">' + bankMarkup(list(person.registered), 'Registered') + bankMarkup(list(person.live), 'Live') + '</div></article>').join('');
     $('people-empty').hidden = visible.length > 0;
     if (!visible.length) $('people-empty').innerHTML = '<i data-lucide="users"></i><h3>' + (search ? 'No matching people' : 'No enrolled people') + '</h3>';
+    icons($('view-people'));
+    for (const section of $('people-list').querySelectorAll('[data-person]')) {
+      const flag = flags.find((f) => f.person_id === section.dataset.person);
+      const person = people.find((p) => p.id === section.dataset.person);
+      const button = document.createElement('button');
+      button.dataset.reviewAction = flag ? 'unflag-person' : 'flag-person';
+      button.dataset.person = section.dataset.person;
+      button.innerHTML = '<i data-lucide="flag"></i>' + (flag ? 'Remove flag' : 'Flag for review');
+      button.disabled = !list(person?.registered).length;
+      section.querySelector('.person-heading .actions').prepend(button);
+      if (flag) {
+        const badge = document.createElement('span');
+        badge.className = 'badge review-flag';
+        badge.textContent = 'Flagged for review';
+        section.querySelector('.person-heading h3').append(' ', badge);
+      }
+    }
     icons($('view-people'));
     updateActions();
   }
@@ -605,6 +623,7 @@
         renderCameras();
         renderPeople();
         renderDiagnostics();
+        document.dispatchEvent(new CustomEvent('office:state', {detail: data}));
       } catch (error) {
         app.connected = false;
         $('connection-state').className = 'status offline';
@@ -788,7 +807,7 @@
     }
   });
 
-  const settingNames = ['match_threshold', 'match_margin', 'admission_threshold', 'admission_margin', 'adaptation_mode', 'single_reference_mode', 'face_detection_mode', 'analysis_fps', 'recognition_hz', 'face_min_width', 'quality_strictness'];
+  const settingNames = ['match_threshold', 'match_margin', 'admission_threshold', 'admission_margin', 'adaptation_mode', 'single_reference_mode', 'face_detection_mode', 'analysis_fps', 'recognition_hz', 'face_min_width', 'quality_strictness', 'unknown_capture_enabled', 'flagged_review_enabled', 'review_consent', 'unknown_retention_hours', 'unknown_max_records', 'review_notice_cooldown', 'review_match_threshold', 'review_match_margin'];
   const dirtySettings = new Set();
   let savingSettings = false;
   const settingInput = (name) => $('settings-form').elements.namedItem(name);
@@ -799,12 +818,15 @@
     settingInput('adaptation_mode').querySelector('[value="auto"]').disabled = autoLocked;
     $('auto-lock-reason').hidden = !autoLocked;
     $('auto-lock-reason').textContent = autoLocked ? (app.data?.metrics?.auto_admission_reason || 'Auto is locked pending explicit threshold validation.') : '';
-    for (const id of ['settings-fields', 'admission-fields', 'capture-fields']) $(id).disabled = savingSettings || !app.connected;
+    for (const id of ['settings-fields', 'admission-fields', 'capture-fields', 'review-fields']) $(id).disabled = savingSettings || !app.connected;
     for (const name of settingNames) {
       const input = settingInput(name);
       const value = settingValue(name);
       input.disabled = savingSettings || !app.connected || value == null;
-      if (!dirtySettings.has(name) && value != null) input.value = String(value);
+      if (!dirtySettings.has(name) && value != null) {
+        if (input.type === 'checkbox') input.checked = Boolean(value);
+        else input.value = String(value);
+      }
     }
     $('single-reference-warning').hidden = settingInput('single_reference_mode').value !== 'review';
     $('quality-strictness').value = settingInput('quality_strictness').value;
@@ -817,7 +839,8 @@
   $('settings-form').addEventListener('input', (event) => {
     if (!settingNames.includes(event.target.name)) return;
     const original = settingValue(event.target.name);
-    if (String(original) === event.target.value) dirtySettings.delete(event.target.name);
+    const current = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
+    if (String(original) === String(current)) dirtySettings.delete(event.target.name);
     else dirtySettings.add(event.target.name);
     syncSettings();
   });
@@ -854,7 +877,7 @@
     const patch = {};
     for (const name of dirtySettings) {
       const input = settingInput(name);
-      patch[name] = input.tagName === 'SELECT' ? input.value : Number(input.value);
+      patch[name] = input.type === 'checkbox' ? input.checked : input.tagName === 'SELECT' ? input.value : Number(input.value);
     }
     if (patch.adaptation_mode === 'auto' && !(await confirmAction('Enable automatic adaptation?', 'Change the live photo adaptation mode to Auto for this evaluation?', 'Enable auto', false))) return;
     savingSettings = true;
@@ -882,6 +905,7 @@
     for (const tile of app.cameras.values()) tile.sync();
     clearTimeout(candidateTimer);
     if (name === 'diagnostics') refreshCandidates();
+    document.dispatchEvent(new CustomEvent('office:tab', {detail: name}));
   }
 
   document.querySelector('.view-tabs').addEventListener('click', (event) => {
@@ -1085,6 +1109,12 @@
   }
 
   $('add-person').addEventListener('click', () => openEnrollment());
+  document.addEventListener('office:enroll-files', (event) => {
+    if (!app.connected || enrollment.busy) return;
+    openEnrollment();
+    selectFiles(event.detail);
+  });
+  document.addEventListener('office:refresh', refreshState);
   $('enroll-files').addEventListener('change', (event) => selectFiles(event.target.files));
   $('enroll-folder').addEventListener('change', (event) => selectFiles(event.target.files));
   $('enroll-zip').addEventListener('change', (event) => selectFiles(event.target.files));

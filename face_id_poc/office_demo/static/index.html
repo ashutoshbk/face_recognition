@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/static/style.css">
   <script src="/static/lucide.min.js" defer></script>
   <script src="/static/app.js" defer></script>
+  <script src="/static/review.js" defer></script>
 </head>
 <body>
   <header class="app-header">
@@ -18,6 +19,8 @@
   <nav class="view-tabs" role="tablist" aria-label="Office evaluation">
     <button id="tab-cameras" role="tab" aria-controls="view-cameras" aria-selected="true" tabindex="0" data-tab="cameras"><i data-lucide="camera" aria-hidden="true"></i>Cameras<span id="camera-count" class="count">0</span></button>
     <button id="tab-people" role="tab" aria-controls="view-people" aria-selected="false" tabindex="-1" data-tab="people"><i data-lucide="users" aria-hidden="true"></i>People<span id="people-count" class="count">0</span></button>
+    <button id="tab-unknown" role="tab" aria-controls="view-unknown" aria-selected="false" tabindex="-1" data-tab="unknown"><i data-lucide="user-round-search" aria-hidden="true"></i>Unknown faces<span id="unknown-count" class="count">0</span></button>
+    <button id="tab-notices" role="tab" aria-controls="view-notices" aria-selected="false" tabindex="-1" data-tab="notices"><i data-lucide="flag" aria-hidden="true"></i>Review notices<span id="notice-count" class="count">0</span></button>
     <button id="tab-diagnostics" role="tab" aria-controls="view-diagnostics" aria-selected="false" tabindex="-1" data-tab="diagnostics"><i data-lucide="activity" aria-hidden="true"></i>Diagnostics</button>
   </nav>
   <main>
@@ -32,6 +35,16 @@
       <div class="section-heading"><div><h2>People</h2><p id="people-summary" class="muted">Loading enrollment state...</p></div><div class="actions"><div class="search-field"><i data-lucide="search" aria-hidden="true"></i><input id="people-search" type="search" placeholder="Search people" aria-label="Search people"></div><button id="add-person" class="primary"><i data-lucide="user-plus" aria-hidden="true"></i>Enroll images</button></div></div>
       <div id="people-list" class="people-list"></div>
       <div id="people-empty" class="empty-state"><i data-lucide="users" aria-hidden="true"></i><h3>Loading people</h3></div>
+    </section>
+    <section id="view-unknown" role="tabpanel" aria-labelledby="tab-unknown" hidden>
+      <div class="section-heading"><div><h2>Unknown faces</h2><p id="unknown-summary" class="muted">Collection off</p></div><button data-review-refresh="unknowns" class="icon-button" title="Refresh unknown faces" aria-label="Refresh unknown faces"><i data-lucide="refresh-cw"></i></button></div>
+      <div id="unknown-error" class="notice error" role="status" hidden></div><div id="unknown-list" class="review-records"></div>
+      <div class="review-pagination"><button id="unknown-prev" disabled>Previous</button><span id="unknown-page" class="muted"></span><button id="unknown-next" disabled>Next</button></div>
+    </section>
+    <section id="view-notices" role="tabpanel" aria-labelledby="tab-notices" hidden>
+      <div class="section-heading"><div><h2>Review notices</h2><p id="notices-summary" class="muted">Flagged-person review off</p></div><button data-review-refresh="notices" class="icon-button" title="Refresh notices" aria-label="Refresh notices"><i data-lucide="refresh-cw"></i></button></div>
+      <div id="notices-error" class="notice error" role="status" hidden></div><div id="notices-list" class="review-records"></div>
+      <div class="review-pagination"><button id="notices-prev" disabled>Previous</button><span id="notices-page" class="muted"></span><button id="notices-next" disabled>Next</button></div>
     </section>
     <section id="view-diagnostics" role="tabpanel" aria-labelledby="tab-diagnostics" hidden>
       <div class="section-heading"><div><h2>Diagnostics</h2><p id="last-update" class="muted">Waiting for state</p></div><div class="actions"><button id="refresh-state" title="Refresh state"><i data-lucide="refresh-cw" aria-hidden="true"></i>Refresh</button><button id="download-report"><i data-lucide="download" aria-hidden="true"></i>Report JSON</button></div></div>
@@ -55,8 +68,17 @@
               <div class="form-footer"><span class="muted">Relaxed 0 / Strict 100</span></div>
               <label>Face detection<select name="face_detection_mode"><option value="full_frame">Full frame</option><option value="head_detail">Full frame + head detail</option></select></label>
             </fieldset>
+            <fieldset id="review-fields" disabled><legend>Optional local review</legend>
+              <label class="checkbox"><input name="review_consent" type="checkbox"><span>This is a controlled test with consenting participants.</span></label>
+              <label class="checkbox"><input name="unknown_capture_enabled" type="checkbox"><span>Save unknown faces</span></label>
+              <label class="checkbox"><input name="flagged_review_enabled" type="checkbox"><span>Flagged-person review notices</span></label>
+              <div class="field-pair"><label>Retention (hours)<input name="unknown_retention_hours" type="number" min="1" max="168" step="1" required></label><label>Unknown record limit<input name="unknown_max_records" type="number" min="1" max="500" step="1" required></label></div>
+              <div class="field-pair"><label>Notice threshold<input name="review_match_threshold" type="number" min="0.68" max="1" step="0.01" required></label><label>Notice margin<input name="review_match_margin" type="number" min="0.10" max="0.5" step="0.01" required></label></div>
+              <label>Notice cooldown (seconds)<input name="review_notice_cooldown" type="number" min="10" max="3600" step="1" required></label>
+              <p id="review-storage" class="muted">No review storage used</p>
+            </fieldset>
             <div id="settings-error" class="notice error" role="alert" hidden></div>
-            <div class="form-footer"><span id="settings-status" class="muted" role="status">Waiting for settings</span><div class="actions"><button id="settings-defaults" type="button" title="Restore all 11 Office Demo settings" disabled><i data-lucide="rotate-ccw" aria-hidden="true"></i>Reset all settings</button><button id="save-settings" class="primary" disabled><i data-lucide="check" aria-hidden="true"></i>Save settings</button></div></div>
+            <div class="form-footer"><span id="settings-status" class="muted" role="status">Waiting for settings</span><div class="actions"><button id="settings-defaults" type="button" title="Restore all evaluation and review settings" disabled><i data-lucide="rotate-ccw" aria-hidden="true"></i>Reset all settings</button><button id="save-settings" class="primary" disabled><i data-lucide="check" aria-hidden="true"></i>Save settings</button></div></div>
           </form>
         </section>
         <div class="diagnostic-readouts">
@@ -126,6 +148,7 @@
     </form>
   </dialog>
 
+  <dialog id="flag-dialog" class="small-dialog" aria-labelledby="flag-title"><form id="flag-form"><div class="dialog-header"><h2 id="flag-title">Flag participant for review</h2><button type="button" class="icon-button" data-close="flag-dialog" aria-label="Close"><i data-lucide="x"></i></button></div><div class="dialog-body"><p id="flag-person-name"></p><label>Reason<input id="flag-reason" maxlength="200" required></label><label>Expires<select id="flag-expiry"><option value="24">24 hours</option><option value="72">72 hours</option><option value="168">7 days</option><option value="">No expiry</option></select></label><label class="checkbox"><input id="flag-consent" type="checkbox" required><span>This participant consented to the flagged-person test.</span></label><p id="flag-error" class="notice error" hidden></p></div><div class="dialog-footer"><button type="button" data-close="flag-dialog">Cancel</button><button id="flag-save" type="submit" class="primary"><i data-lucide="flag"></i>Save review flag</button></div></form></dialog>
   <dialog id="confirm-dialog" class="small-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message"><form method="dialog"><div class="dialog-header"><h2 id="confirm-title">Confirm deletion</h2></div><div class="dialog-body"><p id="confirm-message"></p></div><div class="dialog-footer"><button value="cancel" autofocus>Cancel</button><button id="confirm-action" value="confirm" class="danger-button">Delete</button></div></form></dialog>
   <dialog id="photo-dialog" class="photo-dialog" aria-labelledby="photo-title"><div class="dialog-header"><h2 id="photo-title">Photo</h2><button class="icon-button" data-close="photo-dialog" title="Close" aria-label="Close"><i data-lucide="x" aria-hidden="true"></i></button></div><div class="dialog-body"><img id="photo-large" alt="Selected evaluation image"><p id="photo-details" class="muted"></p></div></dialog>
   <div id="toast" role="status" hidden></div>

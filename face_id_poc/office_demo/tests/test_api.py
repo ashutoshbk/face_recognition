@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from domain import Gallery, unit
 from runtime import DEFAULTS, SETTINGS_PROFILE, Manager
+from optional_review import REVIEW_DEFAULTS, ReviewService
 
 
 class Index:
@@ -52,6 +53,7 @@ def client(tmp_path, monkeypatch):
     module.manager.cameras.clear()
     module.manager.vision = Vision()
     module.manager.settings = dict(DEFAULTS)
+    module.manager.review = ReviewService(tmp_path, gallery, module.manager.settings)
     module.enrollment.manager = module.manager
     yield TestClient(module.app)
     module.manager.cameras.clear()
@@ -174,12 +176,13 @@ def test_complete_office_preset_and_reset_persist_without_deleting_data(client):
     camera = client.post('/api/cameras', json={'name':'Synthetic camera',
         'url':'rtsp://127.0.0.1:18554/test', 'authorized':True}).json()
     profile = client.get('/api/settings/defaults').json()
-    assert profile['profile'] == SETTINGS_PROFILE == 'office-demo-20261023'
+    assert profile['profile'] == SETTINGS_PROFILE == 'office-demo-20261029'
     expected = dict(match_threshold=.30, match_margin=.06, admission_threshold=.68,
         admission_margin=.10, adaptation_mode='review', analysis_fps=10., recognition_hz=1.,
         face_min_width=20, quality_strictness=49, single_reference_mode='review',
         face_detection_mode='full_frame')
-    assert profile['settings'] == expected == DEFAULTS and len(expected) == 11
+    expected.update(REVIEW_DEFAULTS)
+    assert profile['settings'] == expected == DEFAULTS and len(expected) == 19
     changed = dict(match_threshold=.55, match_margin=.08, admission_threshold=.8,
         admission_margin=.2, adaptation_mode='off', analysis_fps=4., recognition_hz=2.,
         face_min_width=90, quality_strictness=75, single_reference_mode='off',

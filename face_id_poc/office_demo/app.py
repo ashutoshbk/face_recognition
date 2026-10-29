@@ -82,7 +82,7 @@ def state():
 
 @app.get("/api/health")
 def health():
-    return {"release": "office-evaluation-20261023", "ready": manager.workers_ready and gallery.healthy,
+    return {"release": "office-evaluation-20261029", "ready": manager.workers_ready and gallery.healthy,
             "engine_error": manager.engine_error, "index_error": gallery.error}
 
 
@@ -99,6 +99,8 @@ async def create_person(request: Request):
 
 @app.delete("/api/people/{identifier}")
 def delete_person(identifier: str):
+    manager.review.configure(manager.settings)
+    manager.review.store.remove_person(identifier)
     gallery.delete_person(identifier)
     manager.reset_evidence()
     return {"ok": True, "pending_file_cleanup": gallery.pending_cleanup_count()}
@@ -106,7 +108,9 @@ def delete_person(identifier: str):
 
 @app.delete("/api/photos/{identifier}")
 def delete_photo(identifier: str):
+    manager.review.configure(manager.settings)
     gallery.delete_photo(identifier)
+    manager.review.store.remove_reference(identifier)
     manager.reset_evidence()
     return {"ok": True, "pending_file_cleanup": gallery.pending_cleanup_count()}
 
@@ -220,6 +224,50 @@ def settings_defaults():
     return {"profile": SETTINGS_PROFILE, "settings": dict(DEFAULTS)}
 
 
+@app.get("/api/review/{kind}")
+def review_items(kind: str, offset: int = 0, limit: int = 50):
+    if offset < 0 or not 1 <= limit <= 100:
+        raise ValueError("Invalid review page")
+    return manager.review.store.list(kind, offset, limit)
+
+
+@app.get("/api/review/photos/{identifier}")
+def review_photo(identifier: str):
+    return Response(manager.review.store.photo(identifier), media_type="image/jpeg")
+
+
+@app.delete("/api/review/{kind}/{identifier}")
+def review_delete(kind: str, identifier: str):
+    manager.review.store.delete(kind, identifier)
+    return {"ok": True}
+
+
+@app.post("/api/review/notices/{identifier}/acknowledge")
+def acknowledge_notice(identifier: str):
+    manager.review.store.acknowledge(identifier)
+    return {"ok": True}
+
+
+@app.post("/api/people/{identifier}/flag")
+async def flag_person(identifier: str, request: Request):
+    data = await request.json()
+    person = next((p for p in gallery.people() if p["id"] == identifier), None)
+    if person is None or not person["registered"]:
+        raise ValueError("Flag only an explicitly enrolled test participant with registered references")
+    if data.get("participant_consented") is not True:
+        raise ValueError("Confirm this participant has consented to the flagged-person test")
+    manager.review.store.set_flag(identifier, data.get("reason", ""), data.get("expires_hours"))
+    manager.review.configure(manager.settings)
+    return {"ok": True}
+
+
+@app.delete("/api/people/{identifier}/flag")
+def unflag_person(identifier: str):
+    manager.review.store.remove_flag(identifier)
+    manager.review.configure(manager.settings)
+    return {"ok": True}
+
+
 @app.post("/api/settings")
 async def settings(request: Request):
     return manager.update_settings(await request.json())
@@ -261,6 +309,7 @@ def report():
         c.pop("tracks", None)
         c.pop("url_redacted", None)
     state.pop("people", None)
+    state.get("review", {}).pop("flags", None)
     state["timestamp"] = time.time()
     state["scope"] = "Local evaluation; timing is not identity accuracy or production capacity"
     return JSONResponse(state, headers={"Content-Disposition": "attachment; filename=office-evaluation-metrics.json"})
